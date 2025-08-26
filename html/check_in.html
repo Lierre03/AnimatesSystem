@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animates PH - Camaro Branch - Customer Check-in</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { 
+                        primary: '#D4AF37', 
+                        secondary: '#8C7A1E',
+                        gold: {
+                            50: '#FFFBEB',
+                            100: '#FEF3C7',
+                            200: '#FDE68A',
+                            300: '#FCD34D',
+                            400: '#FBBF24',
+                            500: '#D4AF37',
+                            600: '#D97706',
+                            700: '#B45309',
+                            800: '#92400E',
+                            900: '#78350F'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+        .gradient-bg { background: linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%); }
+        .card-shadow { box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); }
+        .btn-hover { transition: all 0.3s ease; }
+        .btn-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 25px -5px rgba(212, 175, 55, 0.4); }
+        
+        .notification-processing {
+            border-left: 4px solid rgba(255, 255, 255, 0.8);
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-left-color: rgba(255, 255, 255, 0.8); }
+            50% { border-left-color: rgba(255, 255, 255, 1); }
+        }
+
+        .notification-processing {
+            animation: pulse-border 2s infinite;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <!-- Decorative background elements -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-gold-200/30 to-gold-300/20 rounded-full blur-3xl"></div>
+        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-gold-100/30 to-gold-200/20 rounded-full blur-3xl"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="relative bg-white/80 backdrop-blur-sm shadow-sm border-b border-gold-100 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center py-6">
+                <div class="flex items-center space-x-4">
+                    <div class="relative">
+                        <div class="absolute inset-0 bg-gold-200 rounded-full blur-sm"></div>
+                        <img src="../animates_logo.png" alt="Animates Logo" class="relative h-14 w-14 object-contain">
+                    </div>
+                    <div>
+                        <p class="text-lg font-semibold text-gold-700">Animates PH</p>
+                        <p class="text-sm text-gold-600 font-medium">Camaro Branch</p>
+                        <p class="text-xs text-gray-500">Pet Grooming & Care Services</p>
+                    </div>
+                </div>
+                <div class="hidden sm:flex items-center space-x-4">
+                    <span class="text-sm text-gold-600">📞 (02) 8123-4567</span>
+                    <span class="text-sm text-gold-600">📍 Quezon City</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Progress Indicator -->
+        <div class="mb-8">
+            <div class="flex items-center justify-center">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-gold-500 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-md" id="step1">1</div>
+                        <span class="ml-2 text-sm font-medium text-gray-900" id="step1-text">Pet Information</span>
+                    </div>
+                    <div class="w-16 h-0.5 bg-gold-200" id="progress1"></div>
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-gray-500 text-sm font-medium" id="step2">2</div>
+                        <span class="ml-2 text-sm font-medium text-gray-500" id="step2-text">Services</span>
+                    </div>
+                    <div class="w-16 h-0.5 bg-gray-300" id="progress2"></div>
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-gray-500 text-sm font-medium" id="step3">3</div>
+                        <span class="ml-2 text-sm font-medium text-gray-500" id="step3-text">RFID Assignment</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        
+
+        <!-- Form Container -->
+        <div class="bg-white/90 backdrop-blur-sm rounded-2xl card-shadow overflow-hidden border border-gold-100/50">
+            <!-- Step 1: Pet Information -->
+            <div id="form-step-1" class="form-step">
+
+
+                <div class="px-6 py-8 sm:px-10">
+                    <div class="text-center mb-8">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gold-100 to-gold-200 rounded-full mb-4">
+                            <img src="../animates_logo.png" alt="Animates Logo" class="h-12 w-12 object-contain">
+                        </div>
+
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">Welcome to Animates PH - Camaro Branch!</h2>
+                        <p class="text-gray-600">Let's start by getting to know your furry friend</p>
+                    </div>
+
+                    <form id="petInfoForm" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Pet Name *</label>
+                                <input type="text" id="petName" required 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors"
+                                       placeholder="e.g., Buddy">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Pet Type *</label>
+                                <select id="petType" required
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors">
+                                    <option value="">Select pet type</option>
+                                    <option value="dog">Dog</option>
+                                    <option value="cat">Cat</option>
+                                    <option value="others">Others</option>
+                                </select>
+
+                                <!-- Add this right after the Pet Type select field -->
+                                <div id="customPetTypeContainer" class="hidden mt-3">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Specify Pet Type *</label>
+                                    <input type="text" id="customPetType" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors"
+                                        placeholder="Enter pet type manually">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Pet Breed *</label>
+                                <select id="petBreed" required 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors"
+                                        disabled>
+                                    <option value="">First select pet type</option>
+                                </select>
+                                <input type="text" id="petBreedCustom" 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors hidden mt-3"
+                                       placeholder="Enter pet breed manually">
+                                <div class="mt-3">
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Pet Weight (kg)</label>
+                                    <input type="number" id="petWeight" step="0.1" min="0"
+                                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors"
+                                           placeholder="Enter weight in kg">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Pet Age</label>
+                                <select id="petAge" 
+                                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors">
+                                    <option value="">Select age range</option>
+                                    <option value="young">Young (0-1 year)</option>
+                                    <option value="juvenile">Juvenile (1-3 years)</option>
+                                    <option value="adult">Adult (3-7 years)</option>
+                                    <option value="senior">Senior (7+ years)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Pet Size</label>
+                            <select id="petSize" 
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
+                                <option value="">Select size</option>
+                                <option value="small">Small (0-25 lbs)</option>
+                                <option value="medium">Medium (25-60 lbs)</option>
+                                <option value="large">Large (60-90 lbs)</option>
+                                <option value="xlarge">Extra Large (90+ lbs)</option>
+                            </select>
+                        </div> -->
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Owner Name *</label>
+                            <input type="text" id="ownerName" required 
+                                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                                   placeholder="Your full name">
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Phone Number *</label>
+                                <input type="tel" id="ownerPhone" required 
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                                       placeholder="09XX-XXX-XXXX">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
+                                <input type="email" id="ownerEmail" required
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                                       placeholder="your@email.com">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Special Instructions or Medical Conditions</label>
+                            <textarea id="specialNotes" rows="3" 
+                                      class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                                      placeholder="Any special care instructions, allergies, or behavioral notes..."></textarea>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <button type="button" onclick="nextStep()" class="inline-flex items-center px-8 py-3 bg-gold-500 hover:bg-gold-600 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 btn-hover">
+                                <span class="mr-2">Next: Select Services</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Step 2: Service Selection -->
+            <div id="form-step-2" class="form-step hidden">
+    <div class="px-6 py-8 sm:px-10">
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gold-100 to-gold-200 rounded-full mb-4">
+                <svg class="w-8 h-8 text-gold-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Select Grooming Services</h2>
+            <p class="text-gray-600">Choose the services your pet needs today</p>
+        </div>
+
+        <!-- Pet Size Selection for Pricing -->
+        <div class="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-xl p-6 shadow-sm mb-6">
+            <div class="flex items-center mb-4">
+                <div class="inline-flex items-center justify-center w-10 h-10 bg-amber-100 rounded-full mr-3">
+                    <svg class="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-amber-900">Pet Size for Pricing</h3>
+            </div>
+            <div class="bg-white/80 rounded-lg p-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select your pet's size to see accurate pricing *</label>
+                <select id="petSizeForPricing" required
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent transition-colors">
+                    <option value="">Select pet size for pricing</option>
+                    <option value="small">Small (0-15 lbs)</option>
+                    <option value="medium">Medium (16-40 lbs)</option>
+                    <option value="large">Large (41-70 lbs)</option>
+                    <option value="extra_large">Extra Large (71+ lbs)</option>
+                </select>
+                <p class="text-sm text-amber-700 mt-2">
+                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    Prices vary by pet size. Please select to see accurate pricing.
+                </p>
+            </div>
+        </div>
+
+        <div id="servicesContainer" class="space-y-6 mb-8">
+            <!-- Services will be loaded here dynamically -->
+            <div class="text-center py-8">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                <p class="text-gray-600">Loading services...</p>
+            </div>
+        </div>
+
+        <!-- Order Summary -->
+        <div class="bg-gradient-to-r from-gold-100/5 to-gold-200/5 border-2 border-gold-200/20 rounded-xl p-6 mb-8 shadow-lg">
+            <div class="flex items-center mb-4">
+                <svg class="w-6 h-6 text-gold-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                </svg>
+                <h3 class="text-lg font-semibold text-gray-900">Order Summary</h3>
+            </div>
+            <div id="selectedServices" class="space-y-3 mb-6">
+                <div class="text-center py-8">
+                    <svg class="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                    </svg>
+                    <p class="text-gray-500 font-medium">No services selected</p>
+                    <p class="text-sm text-gray-400">Choose from the services above</p>
+                </div>
+            </div>
+            <div class="border-t-2 border-gold-200/20 pt-4">
+                <div class="flex justify-between items-center bg-white/80 rounded-lg p-4">
+                    <span class="text-xl font-bold text-gray-900">Total Amount:</span>
+                    <span id="totalAmount" class="text-2xl font-bold text-gold-500">₱0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-between">
+            <button type="button" onclick="previousStep()" class="inline-flex items-center px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-all duration-200 border border-gray-300 hover:border-gray-400">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                </svg>
+                Back
+            </button>
+            <button type="button" onclick="nextStep()" id="servicesNextBtn" disabled 
+                    class="bg-gray-300 text-gray-500 px-8 py-3 rounded-lg font-medium cursor-not-allowed transition-all duration-200 btn-hover">
+                <span>Next: RFID Assignment</span>
+                <svg class="w-4 h-4 ml-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                </svg>
+            </button>
+            <script>
+            // Enable next button if at least one service is selected
+            function updateServicesNextButton() {
+                const checkboxes = document.querySelectorAll('.service-checkbox');
+                const nextBtn = document.getElementById('servicesNextBtn');
+                
+                let atLeastOneChecked = false;
+                checkboxes.forEach(checkbox => {
+                    if (checkbox.checked) {
+                        atLeastOneChecked = true;
+                    }
+                });
+                
+                if (atLeastOneChecked) {
+                    nextBtn.disabled = false;
+                    nextBtn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                    nextBtn.classList.add('bg-gold-500', 'hover:bg-gold-600', 'text-white', 'shadow-md', 'hover:shadow-lg', 'transform', 'hover:-translate-y-0.5');
+                } else {
+                    nextBtn.disabled = true;
+                    nextBtn.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                    nextBtn.classList.remove('bg-gold-500', 'hover:bg-gold-600', 'text-white', 'shadow-md', 'hover:shadow-lg', 'transform', 'hover:-translate-y-0.5');
+                }
+            }
+            
+            // Enable complete button when RFID is assigned
+            function updateCompleteButton() {
+                const rfidInput = document.getElementById('rfidNumber');
+                const completeBtn = document.getElementById('completeBtn');
+                
+                if (rfidInput.value.trim() !== '') {
+                    completeBtn.disabled = false;
+                    completeBtn.classList.remove('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                    completeBtn.classList.add('bg-gold-500', 'hover:bg-gold-600', 'text-white', 'shadow-md', 'hover:shadow-lg', 'transform', 'hover:-translate-y-0.5');
+                } else {
+                    completeBtn.disabled = true;
+                    completeBtn.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                    completeBtn.classList.remove('bg-gold-500', 'hover:bg-gold-600', 'text-white', 'shadow-md', 'hover:shadow-lg', 'transform', 'hover:-translate-y-0.5');
+                }
+            }
+            </script>
+        </div>
+    </div>
+</div>
+
+            <!-- Step 3: RFID Assignment -->
+            <div id="form-step-3" class="form-step hidden">
+                <div class="px-6 py-8 sm:px-10">
+                    <div class="text-center mb-8">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gold-100 to-gold-200 rounded-full mb-4">
+                            <svg class="w-8 h-8 text-gold-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                            </svg>
+                        </div>
+                        <h2 class="text-2xl font-bold text-gray-900 mb-2">RFID Tag Assignment</h2>
+                        <p class="text-gray-600">Assigning RFID tag for real-time tracking</p>
+                    </div>
+
+                    <!-- RFID Scanner -->
+                    <div class="bg-white border-2 border-primary/20 rounded-xl p-8 text-center mb-8 shadow-lg">
+                        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full mb-6">
+                            <svg class="w-10 h-10 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-3" id="rfidStatus">Assigning RFID Tag...</h3>
+                        <p class="text-gray-600 mb-6" id="rfidMessage">Please wait while we assign a tracking tag for your pet</p>
+                        
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">RFID Tag Number *</label>
+                            <div class="flex">
+                                <input type="text" id="rfidNumber" required
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent transition-colors"
+                                       placeholder="Scan or enter RFID tag number" oninput="updateCompleteButton()">
+                                <button type="button" class="ml-2 px-4 py-2 bg-gold-500 text-white rounded-lg hover:bg-gold-600 transition-colors btn-hover">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="bg-gradient-to-r from-gold-100/5 to-gold-200/5 border border-gold-200/20 rounded-lg p-6 inline-block mb-6">
+                            <p class="text-sm text-gray-600 mb-2">Assigned Tag Details:</p>
+                            <div id="assignedTag" class="text-center">
+                                <!-- Card details will be populated here -->
+                            </div>
+                            <div class="flex justify-center mt-3">
+                                <div class="flex space-x-1">
+                                    <div class="w-2 h-2 bg-gold-500 rounded-full animate-pulse"></div>
+                                    <div class="w-2 h-2 bg-gold-500 rounded-full animate-pulse" style="animation-delay: 0.2s"></div>
+                                    <div class="w-2 h-2 bg-gold-500 rounded-full animate-pulse" style="animation-delay: 0.4s"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="retryButtonContainer" class="hidden">
+                            <button onclick="retryRFIDAssignment()" class="inline-flex items-center px-6 py-3 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg font-medium transition-all duration-200 border border-primary/20">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Try Different RFID Card
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Booking Summary -->
+                    <div class="bg-white border-2 border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
+                        <div class="flex items-center mb-4">
+                            <svg class="w-6 h-6 text-primary mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            <h3 class="text-lg font-semibold text-gray-900">Booking Summary</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <p class="text-sm font-medium text-gray-600 mb-2">Pet Information</p>
+                                <p class="font-semibold text-gray-900" id="summaryPetName">-</p>
+                                <p class="text-sm text-gray-600" id="summaryPetDetails">-</p>
+                            </div>
+                            <div class="bg-gray-50 rounded-lg p-4">
+                                <p class="text-sm font-medium text-gray-600 mb-2">Owner</p>
+                                <p class="font-semibold text-gray-900" id="summaryOwnerName">-</p>
+                                <p class="text-sm text-gray-600" id="summaryOwnerContact">-</p>
+                            </div>
+                        </div>
+                        <div class="mt-6 pt-4 border-t border-gray-200">
+                            <p class="text-sm font-medium text-gray-600 mb-3">Selected Services</p>
+                            <div id="summaryServices" class="space-y-2 mb-4"></div>
+                            <div class="flex justify-between items-center pt-4 border-t border-gray-200 bg-primary/5 rounded-lg p-4">
+                                <span class="text-lg font-semibold text-gray-900">Total Amount:</span>
+                                <span class="text-2xl font-bold text-primary" id="summaryTotal">₱0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Workflow Information -->
+                    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 mb-6">
+                        <div class="flex items-center mb-4">
+                            <svg class="w-6 h-6 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <h4 class="font-semibold text-blue-900">What happens next?</h4>
+                        </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-blue-300">
+                                        <i class="fas fa-check text-blue-600 text-lg"></i>
+                                    </div>
+                                    <p class="font-semibold text-blue-800">Check-in Complete</p>
+                                    <p class="text-blue-600">Step 1</p>
+                                </div>
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-blue-200">
+                                        <i class="fas fa-bath text-blue-500 text-lg"></i>
+                                    </div>
+                                    <p class="font-semibold text-blue-800">Bathing</p>
+                                    <p class="text-blue-600">Step 2</p>
+                                </div>
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-blue-200">
+                                        <i class="fas fa-scissors text-blue-500 text-lg"></i>
+                                    </div>
+                                    <p class="font-semibold text-blue-800">Grooming</p>
+                                    <p class="text-blue-600">Step 3</p>
+                                </div>
+                                <div class="text-center">
+                                    <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-blue-200">
+                                        <i class="fas fa-user-check text-blue-500 text-lg"></i>
+                                    </div>
+                                    <p class="font-semibold text-blue-800">Ready for Pickup</p>
+                                    <p class="text-blue-600">Step 4</p>
+                                </div>
+                            </div>
+                        <div class="text-center mt-4 pt-4 border-t border-blue-200">
+                            <p class="text-blue-700 font-medium">You'll receive email updates at each stage!</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between">
+                        <button type="button" onclick="previousStep()" class="inline-flex items-center px-8 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-all duration-200 border border-gray-300">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                            </svg>
+                            Back
+                        </button>
+                        <button type="button" onclick="completeBooking()" id="completeBtn" disabled
+                                class="bg-gray-300 text-gray-500 px-8 py-3 rounded-lg font-medium cursor-not-allowed transition-all duration-200 btn-hover">
+                            Complete Check-in
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+          <!-- Success Message -->
+<div id="success-message" class="form-step hidden">
+    <div class="px-6 py-12 sm:px-10">
+        <!-- Success Icon and Header -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full mb-6 shadow-lg">
+                <svg class="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+            </div>
+            <h2 class="text-3xl font-bold text-gray-900 mb-3">Check-in Successfully Completed</h2>
+            <p class="text-xl text-gray-600">Thank you for choosing Animates PH - Camaro Branch</p>
+        </div>
+        
+        <!-- Booking Details Card -->
+        <div class="max-w-3xl mx-auto mb-8">
+            <div class="bg-white border-2 border-gray-200 rounded-xl p-8 mb-6 shadow-lg">
+                <div class="flex items-center justify-center mb-6">
+                    <div class="inline-flex items-center px-6 py-3 bg-green-100 rounded-full border-2 border-green-300">
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></div>
+                        <span class="text-green-800 font-bold text-sm tracking-wide">BOOKING CONFIRMED</span>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-center mb-6">
+                    <div class="bg-white/80 backdrop-blur-sm rounded-lg p-6 border  border-blue-200">
+                        <div class="flex items-center justify-center mb-3">
+                            <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                            </svg>
+                            <p class="text-blue-700 font-semibold">RFID Tag ID</p>
+                        </div>
+                        <p class="text-blue-900  font-bold text-xl" id="finalTagId">---</p>
+                    </div>
+                    <div class="bg-white/80 backdrop-blur-sm rounded-lg p-6 border border-blue-200">
+                        <div class="flex items-center justify-center mb-3">
+                            <svg class="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                            </svg>
+                            <p class="text-blue-700 font-semibold">Booking ID</p>
+                        </div>
+                        <p class="text-blue-900  font-bold text-xl" id="finalBookingId">---</p>
+                    </div>
+                </div>
+                
+                <div class="text-center pt-4 border-t border-grey-200">
+                    <div class="flex items-center justify-center mb-2">
+                        <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <p class="text-blue-700 font-semibold">Estimated Service Time</p>
+                    </div>
+                    <p class="text-blue-900 text-2xl font-bold">1-2 Hours</p>
+                </div>
+            </div>
+            
+            <!-- Service Status Timeline -->
+            <div class="bg-white border-2 border-gray-200 rounded-xl p-8 mb-6 shadow-lg">
+                <div class="text-center mb-6">
+                    <div class="flex items-center justify-center mb-3">
+                        <i class="fas fa-clipboard-list text-2xl text-blue-600 mr-3"></i>
+                        <h3 class="text-xl font-bold text-gray-900">Your Pet's Service Journey</h3>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-green-500">
+                            <i class="fas fa-check text-green-600 text-lg"></i>
+                        </div>
+                        <p class="font-semibold text-green-800">Check-in</p>
+                        <p class="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">Completed</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-blue-300">
+                            <i class="fas fa-bath text-blue-600 text-lg"></i>
+                        </div>
+                        <p class="font-semibold text-blue-800">Bathing</p>
+                        <p class="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">Next</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-gray-300">
+                            <i class="fas fa-scissors text-gray-500 text-lg"></i>
+                        </div>
+                        <p class="font-semibold text-gray-700">Grooming</p>
+                        <p class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Pending</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 border-2 border-gray-300">
+                            <i class="fas fa-user-check text-gray-500 text-lg"></i>
+                        </div>
+                        <p class="font-semibold text-gray-700">Ready</p>
+                        <p class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Pending</p>
+                    </div>
+                </div>
+                <div class="text-center mt-6 pt-6 border-t border-gray-200">
+                    <div class="flex items-center justify-center">
+                        <svg class="w-5 h-5 text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                        </svg>
+                        <p class="text-primary font-semibold">Real-time Email notifications at each stage</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+     
+        <!-- Action Buttons -->
+        <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-6">
+            <button onclick="redirectToPortal()" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-primary hover:bg-blue-700 text-white rounded-xl font-semibold text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 min-w-[160px]">
+                <i class="fas fa-clipboard-list text-base mr-2"></i>
+                Go to Customer Portal
+            </button>
+
+            <button onclick="openGuestTracker()" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 min-w-[160px]">
+                <i class="fas fa-search-location text-base mr-2"></i>
+                Track Your Pet
+            </button>
+
+            <button onclick="generatePDFReceipt()" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl font-semibold text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 min-w-[160px]">
+                <i class="fas fa-print text-base mr-2"></i>
+                Print Receipt
+            </button>
+
+            <button onclick="startNewBooking()" class="w-full sm:w-auto inline-flex items-center justify-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold text-base transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 min-w-[160px]">
+                <i class="fas fa-plus-circle text-base mr-2"></i>
+                New Booking
+            </button>
+        </div>
+
+        <!-- Additional Information -->
+        <div class="text-center mt-10 pt-8 border-t-2 border-gray-200">
+            <div class="max-w-2xl mx-auto">
+                <h4 class="text-lg font-semibold text-gray-900 mb-3">Need Assistance?</h4>
+                <p class="text-gray-600 mb-4">Our team is here to help you with any questions or concerns.</p>
+                <div class="flex flex-col sm:flex-row justify-center items-center space-y-2 sm:space-y-0 sm:space-x-8">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                        </svg>
+                        <span class="text-primary font-semibold">(02) 8123-4567</span>
+                    </div>
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        <span class="text-primary font-semibold">info@8pawspetboutique.com</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="text-center text-sm text-gray-500">
+                <p>&copy; 2025 Animates PH - Camaro Branch. Professional Pet Care Services.</p>
+                <p class="mt-2">📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567 | 📧 info@animates.ph.fairview@gmail.com</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/check_in.js"></script>
+
+</body>
+</html>

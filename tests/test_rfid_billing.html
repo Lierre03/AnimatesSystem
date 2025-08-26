@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RFID Billing Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    </style>
+</head>
+<body class="bg-gray-50 p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">RFID Billing Integration Test</h1>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Test RFID Tags from Database</h2>
+            <p class="text-gray-600 mb-4">Click on any RFID tag below to test the billing integration:</p>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <button onclick="testRfid('5TKVETUH')" class="p-4 bg-blue-100 hover:bg-blue-200 rounded-lg text-center transition-colors">
+                    <div class="font-mono text-lg font-bold">5TKVETUH</div>
+                    <div class="text-sm text-gray-600">bianca (african)</div>
+                </button>
+                <button onclick="testRfid('VQB5J7E7')" class="p-4 bg-green-100 hover:bg-green-200 rounded-lg text-center transition-colors">
+                    <div class="font-mono text-lg font-bold">VQB5J7E7</div>
+                    <div class="text-sm text-gray-600">owley (American Bobtail)</div>
+                </button>
+                <button onclick="testRfid('U6DKP4UZ')" class="p-4 bg-purple-100 hover:bg-purple-200 rounded-lg text-center transition-colors">
+                    <div class="font-mono text-lg font-bold">U6DKP4UZ</div>
+                    <div class="text-sm text-gray-600">tanggol (beagle)</div>
+                </button>
+                <button onclick="testRfid('1HQCNMXF')" class="p-4 bg-yellow-100 hover:bg-yellow-200 rounded-lg text-center transition-colors">
+                    <div class="font-mono text-lg font-bold">1HQCNMXF</div>
+                    <div class="text-sm text-gray-600">bianca (Aegean)</div>
+                </button>
+            </div>
+            
+            <div class="flex space-x-4">
+                <input type="text" id="customRfid" placeholder="Enter custom RFID tag" 
+                       class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                <button onclick="testCustomRfid()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    Test Custom
+                </button>
+            </div>
+        </div>
+        
+        <div id="results" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <h2 class="text-xl font-semibold mb-4">Billing Results</h2>
+            <div id="resultsContent"></div>
+        </div>
+        
+        <div id="loading" class="bg-white rounded-lg shadow-md p-6 hidden">
+            <div class="flex items-center justify-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span class="ml-3 text-gray-600">Loading billing information...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost/animates/api/';
+        
+        async function testRfid(rfidTag) {
+            showLoading();
+            try {
+                const response = await fetch(`${API_BASE}billing.php?rfid=${rfidTag}`);
+                const data = await response.json();
+                displayResults(data, rfidTag);
+            } catch (error) {
+                console.error('Error:', error);
+                displayError('Failed to fetch billing information', rfidTag);
+            }
+        }
+        
+        function testCustomRfid() {
+            const rfidTag = document.getElementById('customRfid').value.trim();
+            if (!rfidTag) {
+                alert('Please enter an RFID tag');
+                return;
+            }
+            testRfid(rfidTag);
+        }
+        
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+        }
+        
+        function displayResults(data, rfidTag) {
+            document.getElementById('loading').classList.add('hidden');
+            const resultsDiv = document.getElementById('results');
+            const contentDiv = document.getElementById('resultsContent');
+            
+            if (data.success && data.pet) {
+                const pet = data.pet;
+                contentDiv.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h3 class="font-semibold text-gray-900 mb-3">Pet Information</h3>
+                            <div class="space-y-2 text-sm">
+                                <p><span class="font-medium">Name:</span> ${pet.petName}</p>
+                                <p><span class="font-medium">Breed:</span> ${pet.breed}</p>
+                                <p><span class="font-medium">Owner:</span> ${pet.owner}</p>
+                                <p><span class="font-medium">Phone:</span> ${pet.phone}</p>
+                                <p><span class="font-medium">Email:</span> ${pet.email}</p>
+                                <p><span class="font-medium">RFID Tag:</span> <span class="font-mono">${pet.rfidTag}</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h3 class="font-semibold text-gray-900 mb-3">Service Timeline</h3>
+                            <div class="space-y-2 text-sm">
+                                <p><span class="font-medium">Check-in:</span> ${pet.checkinTime}</p>
+                                <p><span class="font-medium">Bath Time:</span> ${pet.bathTime}</p>
+                                <p><span class="font-medium">Grooming Time:</span> ${pet.groomingTime}</p>
+                                <p><span class="font-medium">Duration:</span> ${pet.duration}</p>
+                                <p><span class="font-medium">Status:</span> <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">${pet.status}</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6">
+                        <h3 class="font-semibold text-gray-900 mb-3">Service Breakdown</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full border-collapse border border-gray-300">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="border border-gray-300 px-4 py-2 text-left">Service</th>
+                                        <th class="border border-gray-300 px-4 py-2 text-right">Base Price</th>
+                                        <th class="border border-gray-300 px-4 py-2 text-center">Size Modifier</th>
+                                        <th class="border border-gray-300 px-4 py-2 text-right">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${pet.services.map(service => `
+                                        <tr>
+                                            <td class="border border-gray-300 px-4 py-2">${service.name}</td>
+                                            <td class="border border-gray-300 px-4 py-2 text-right">₱${service.basePrice}</td>
+                                            <td class="border border-gray-300 px-4 py-2 text-center">${service.modifier}</td>
+                                            <td class="border border-gray-300 px-4 py-2 text-right font-medium">₱${service.amount}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                                <tfoot class="bg-gray-50">
+                                    <tr>
+                                        <td colspan="3" class="border border-gray-300 px-4 py-2 text-right font-semibold">Total:</td>
+                                        <td class="border border-gray-300 px-4 py-2 text-right font-bold text-lg">₱${pet.totalAmount}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <p class="text-green-800 font-medium">✓ Successfully retrieved billing information for RFID tag: <span class="font-mono">${rfidTag}</span></p>
+                    </div>
+                `;
+            } else {
+                contentDiv.innerHTML = `
+                    <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <p class="text-red-800 font-medium">✗ Error: ${data.error || 'Unknown error'}</p>
+                        <p class="text-red-600 text-sm mt-1">RFID Tag: <span class="font-mono">${rfidTag}</span></p>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.classList.remove('hidden');
+        }
+        
+        function displayError(message, rfidTag) {
+            document.getElementById('loading').classList.add('hidden');
+            const resultsDiv = document.getElementById('results');
+            const contentDiv = document.getElementById('resultsContent');
+            
+            contentDiv.innerHTML = `
+                <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <p class="text-red-800 font-medium">✗ ${message}</p>
+                    <p class="text-red-600 text-sm mt-1">RFID Tag: <span class="font-mono">${rfidTag}</span></p>
+                </div>
+            `;
+            
+            resultsDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
+
+
