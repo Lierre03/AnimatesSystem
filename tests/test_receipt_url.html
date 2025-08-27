@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Receipt URL</title>
+</head>
+<body>
+    <h1>Test Receipt URL</h1>
+    <button onclick="testReceipt()">Test Receipt URL</button>
+    <div id="result"></div>
+
+    <script>
+        async function testReceipt() {
+            try {
+                const receiptUrl = 'http://localhost/animates/api/billing.php?action=print_receipt&booking_id=105&payment_method=cash&payment_reference=&payment_platform=';
+                
+                document.getElementById('result').innerHTML = `
+                    <h2>Testing Receipt URL:</h2>
+                    <p><strong>URL:</strong> ${receiptUrl}</p>
+                    <p><a href="${receiptUrl}" target="_blank">Click here to open receipt</a></p>
+                `;
+                
+                // Also test if the URL is accessible
+                const response = await fetch(receiptUrl);
+                if (response.ok) {
+                    const html = await response.text();
+                    document.getElementById('result').innerHTML += `
+                        <h3>Response Status: ${response.status}</h3>
+                        <p>Receipt URL is working correctly!</p>
+                        <details>
+                            <summary>View Receipt HTML (first 500 chars)</summary>
+                            <pre>${html.substring(0, 500)}...</pre>
+                        </details>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML += `
+                        <h3>Error: ${response.status}</h3>
+                        <p>Receipt URL returned an error.</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h2>Error:</h2>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

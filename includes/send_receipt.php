@@ -31,20 +31,18 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
             b.custom_rfid,
             b.total_amount,
             b.check_in_time,
+            b.amount_tendered,
+            b.change_amount,
             p.name as pet_name,
             p.type as pet_type,
             p.breed as pet_breed,
             c.name as owner_name,
             c.phone as owner_phone,
-            c.email as owner_email,
-            GROUP_CONCAT(CONCAT(s.name, ' - ₱', s.price) SEPARATOR '<br>') as services
+            c.email as owner_email
         FROM bookings b
         JOIN pets p ON b.pet_id = p.id
         JOIN customers c ON p.customer_id = c.id
-        LEFT JOIN booking_services bs ON b.id = bs.booking_id
-        LEFT JOIN services s ON bs.service_id = s.id
-        WHERE b.id = ?
-        GROUP BY b.id");
+        WHERE b.id = ?");
         
         $stmt->execute([$bookingId]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -58,6 +56,52 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
             error_log("No email address found for booking ID: $bookingId");
             return false;
         }
+        
+        // Get services breakdown with detailed information
+        $servicesStmt = $db->prepare("SELECT 
+            s.name as service_name,
+            s.price as base_price,
+            CASE 
+                WHEN p.type = 'cat' AND b.total_amount <= 200 THEN 'Ear Cleaning (Default)'
+                ELSE 'Standard'
+            END as modifier,
+            CASE 
+                WHEN p.type = 'cat' AND b.total_amount <= 200 THEN 200
+                ELSE s.price
+            END as amount
+        FROM bookings b
+        JOIN pets p ON b.pet_id = p.id
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id
+        LEFT JOIN services s ON bs.service_id = s.id
+        WHERE b.id = ?
+        ORDER BY s.id");
+        
+        $servicesStmt->execute([$bookingId]);
+        $services = $servicesStmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // If no services found, create a default service entry
+        if (empty($services)) {
+            if ($booking['pet_type'] === 'cat' && $booking['total_amount'] <= 200) {
+                $services = [[
+                    'service_name' => 'Ear Cleaning',
+                    'base_price' => 200,
+                    'modifier' => 'Default',
+                    'amount' => 200
+                ]];
+            } else {
+                $services = [[
+                    'service_name' => 'General Service',
+                    'base_price' => $booking['total_amount'],
+                    'modifier' => 'Standard',
+                    'amount' => $booking['total_amount']
+                ]];
+            }
+        }
+        
+        // Calculate tax and subtotal
+        $subtotal = $booking['total_amount'];
+        $tax = round($subtotal * 0.12);
+        $discount = 0; // Assuming no discount for now
         
         // Format date
         $date = new DateTime($booking['check_in_time']);
@@ -90,6 +134,33 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
             $paymentInfo .= " ($paymentPlatform, Ref: $paymentReference)";
         }
         
+        // Build services table HTML
+        $servicesHTML = '';
+        foreach ($services as $service) {
+            $servicesHTML .= "
+                <tr>
+                    <td>{$service['service_name']}</td>
+                    <td>₱{$service['base_price']}</td>
+                    <td>{$service['modifier']}</td>
+                    <td>₱{$service['amount']}</td>
+                </tr>";
+        }
+        
+        // Build payment info HTML
+        $paymentInfoHTML = "<tr><td><strong>Payment Method:</strong></td><td>$paymentMethod</td></tr>";
+        if ($paymentReference) {
+            $paymentInfoHTML .= "<tr><td><strong>Reference:</strong></td><td>$paymentReference</td></tr>";
+        }
+        if ($paymentPlatform) {
+            $paymentInfoHTML .= "<tr><td><strong>Platform:</strong></td><td>$paymentPlatform</td></tr>";
+        }
+        if ($booking['amount_tendered']) {
+            $paymentInfoHTML .= "<tr><td><strong>Amount Tendered:</strong></td><td>₱{$booking['amount_tendered']}</td></tr>";
+        }
+        if ($booking['change_amount']) {
+            $paymentInfoHTML .= "<tr><td><strong>Change:</strong></td><td>₱{$booking['change_amount']}</td></tr>";
+        }
+        
         $emailBody = <<<HTML
         <!DOCTYPE html>
         <html>
@@ -101,7 +172,7 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                     color: #333;
                 }
                 .receipt {
-                    max-width: 600px;
+                    max-width: 800px;
                     margin: 0 auto;
                     border: 1px solid #ddd;
                     padding: 20px;
@@ -113,24 +184,35 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                     border-bottom: 2px solid #D4AF37;
                     padding-bottom: 10px;
                 }
-                .logo {
-                    max-width: 150px;
-                    height: auto;
-                }
                 .receipt-details {
                     margin-bottom: 20px;
                 }
                 .receipt-details table {
                     width: 100%;
+                    border-collapse: collapse;
                 }
                 .receipt-details td {
-                    padding: 5px 0;
+                    padding: 8px;
+                    border-bottom: 1px solid #eee;
                 }
                 .services {
                     margin: 20px 0;
                     border-top: 1px solid #eee;
                     border-bottom: 1px solid #eee;
                     padding: 10px 0;
+                }
+                .services table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                .services th, .services td {
+                    padding: 8px;
+                    text-align: left;
+                    border-bottom: 1px solid #eee;
+                }
+                .services th {
+                    background-color: #f8f9fa;
+                    font-weight: bold;
                 }
                 .total {
                     font-size: 18px;
@@ -139,6 +221,19 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                     margin-top: 20px;
                     border-top: 2px solid #D4AF37;
                     padding-top: 10px;
+                }
+                .payment-info {
+                    margin: 20px 0;
+                    border-top: 1px solid #eee;
+                    padding: 10px 0;
+                }
+                .payment-info table {
+                    width: 100%;
+                    border-collapse: collapse;
+                }
+                .payment-info td {
+                    padding: 8px;
+                    border-bottom: 1px solid #eee;
                 }
                 .footer {
                     margin-top: 30px;
@@ -180,6 +275,10 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                             <td>{$booking['owner_name']}</td>
                         </tr>
                         <tr>
+                            <td><strong>Phone:</strong></td>
+                            <td>{$booking['owner_phone']}</td>
+                        </tr>
+                        <tr>
                             <td><strong>Pet:</strong></td>
                             <td>{$booking['pet_name']} ({$booking['pet_type']} - {$booking['pet_breed']})</td>
                         </tr>
@@ -188,19 +287,49 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                             <td>{$booking['custom_rfid']}</td>
                         </tr>
                         <tr>
-                            <td><strong>Payment Method:</strong></td>
-                            <td>$paymentInfo</td>
+                            <td><strong>Check-in Time:</strong></td>
+                            <td>$formattedDate $formattedTime</td>
                         </tr>
                     </table>
                 </div>
                 
                 <div class="services">
                     <h3>Services</h3>
-                    {$booking['services']}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Base Price</th>
+                                <th>Modifier</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            $servicesHTML
+                        </tbody>
+                    </table>
                 </div>
                 
                 <div class="total">
-                    Total: ₱{$booking['total_amount']}
+                    <div style="margin-bottom: 10px;">
+                        <span>Subtotal: ₱$subtotal</span>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <span>Discount: ₱$discount</span>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <span>Tax (12%): ₱$tax</span>
+                    </div>
+                    <div style="font-size: 20px;">
+                        <span>Total: ₱{$booking['total_amount']}</span>
+                    </div>
+                </div>
+                
+                <div class="payment-info">
+                    <h3>Payment Details</h3>
+                    <table>
+                        $paymentInfoHTML
+                    </table>
                 </div>
                 
                 <div class="thank-you">

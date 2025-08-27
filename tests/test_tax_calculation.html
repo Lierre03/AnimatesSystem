@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Tax Calculation</title>
+</head>
+<body>
+    <h1>Test Tax Calculation</h1>
+    <div>
+        <label>Subtotal: ₱</label>
+        <input type="number" id="subtotal" value="200" onchange="calculateTax()">
+    </div>
+    <div>
+        <label>Discount: ₱</label>
+        <input type="number" id="discount" value="0" onchange="calculateTax()">
+    </div>
+    <div>
+        <strong>Tax (12%): </strong><span id="tax">₱0</span>
+    </div>
+    <div>
+        <strong>Total: </strong><span id="total">₱0</span>
+    </div>
+
+    <script>
+        function calculateTax() {
+            const subtotal = parseFloat(document.getElementById('subtotal').value) || 0;
+            const discount = parseFloat(document.getElementById('discount').value) || 0;
+            
+            // Calculate tax (12% of subtotal before discount)
+            const tax = Math.round(subtotal * 0.12);
+            const total = subtotal - discount;
+            
+            document.getElementById('tax').textContent = `₱${tax.toLocaleString()}`;
+            document.getElementById('total').textContent = `₱${total.toLocaleString()}`;
+        }
+        
+        // Calculate on page load
+        calculateTax();
+    </script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Print Functions</title>
+</head>
+<body>
+    <h1>Test Print Functions</h1>
+    
+    <h2>Test Print Bill (Before Payment)</h2>
+    <button onclick="testPrintBill()">Test Print Bill</button>
+    
+    <h2>Test Print Receipt (After Payment)</h2>
+    <button onclick="testPrintReceipt()">Test Print Receipt</button>
+    
+    <div id="result"></div>
+
+    <script>
+        // Test Print Bill function
+        function testPrintBill() {
+            // Simulate bill data
+            const billData = {
+                petName: 'Test Pet',
+                petBreed: 'Golden Retriever',
+                ownerName: 'John Doe',
+                ownerPhone: '+63 912 345 6789',
+                rfidTag: 'TEST123',
+                checkinTime: '9:00 AM',
+                subtotal: '₱1,300',
+                discount: '₱0',
+                tax: '₱156',
+                total: '₱1,300'
+            };
+            
+            // Create bill HTML
+            const billHTML = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Animates PH - Bill #TEST-BILL</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        .bill { max-width: 800px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; }
+                        .header { text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 10px; }
+                        .services { margin: 20px 0; }
+                        .total { font-size: 18px; font-weight: bold; text-align: right; margin-top: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="bill">
+                        <div class="header">
+                            <h2>Animates PH - Bill</h2>
+                            <p>Camaro Branch</p>
+                        </div>
+                        <div>
+                            <p><strong>Customer:</strong> ${billData.ownerName}</p>
+                            <p><strong>Pet:</strong> ${billData.petName} (${billData.petBreed})</p>
+                            <p><strong>RFID:</strong> ${billData.rfidTag}</p>
+                            <p><strong>Check-in Time:</strong> ${billData.checkinTime}</p>
+                        </div>
+                        <div class="services">
+                            <h3>Services</h3>
+                            <p>Basic Bath - ₱300</p>
+                            <p>Full Grooming - ₱500</p>
+                            <p>Nail Trimming - ₱100</p>
+                        </div>
+                        <div class="total">
+                            <p>Subtotal: ${billData.subtotal}</p>
+                            <p>Discount: ${billData.discount}</p>
+                            <p>Tax (12%): ${billData.tax}</p>
+                            <p>Total: ${billData.total}</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            // Open bill in new window
+            const billWindow = window.open('', '_blank');
+            billWindow.document.write(billHTML);
+            billWindow.document.close();
+            
+            document.getElementById('result').innerHTML = '<p style="color: green;">✓ Bill window opened successfully!</p>';
+        }
+        
+        // Test Print Receipt function
+        function testPrintReceipt() {
+            const receiptUrl = 'http://localhost/animates/api/billing.php?action=print_receipt&booking_id=105&payment_method=cash&payment_reference=&payment_platform=';
+            
+            // Use fetch to get the receipt HTML first
+            fetch(receiptUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch receipt');
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Open new window and write the receipt HTML
+                    const printWindow = window.open('', '_blank');
+                    printWindow.document.write(html);
+                    printWindow.document.close();
+                    
+                    document.getElementById('result').innerHTML = '<p style="color: green;">✓ Receipt window opened successfully!</p>';
+                })
+                .catch(error => {
+                    console.error('Error fetching receipt:', error);
+                    document.getElementById('result').innerHTML = '<p style="color: red;">✗ Error: ' + error.message + '</p>';
+                });
+        }
+    </script>
+</body>
+</html>
+
+

@@ -1,0 +1,15 @@
+-- See all services for a specific RFID
+SELECT * FROM booking_customer_rfid_view WHERE custom_rfid = 'RUFD7UUD';
+
+-- See detailed service breakdown for a booking
+SELECT 
+    b.id as booking_id,
+    b.custom_rfid,
+    s.name as service_name,
+    s.price as base_price,
+    bs.price as actual_price,
+    bs.pet_size
+FROM bookings b
+LEFT JOIN booking_services bs ON b.id = bs.booking_id
+LEFT JOIN services s ON bs.service_id = s.id
+WHERE b.custom_rfid = 'RUFD7UUD';
