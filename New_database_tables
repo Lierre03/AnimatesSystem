@@ -1,0 +1,27 @@
+-- Sales transactions table
+CREATE TABLE sales_transactions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    booking_id INT NOT NULL,
+    transaction_reference VARCHAR(50) UNIQUE,
+    amount DECIMAL(10,2),
+    payment_method VARCHAR(20),
+    payment_platform VARCHAR(50),
+    status ENUM('completed', 'voided', 'refunded'),
+    void_reason TEXT NULL,
+    voided_by INT NULL,
+    voided_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (booking_id) REFERENCES bookings(id),
+    FOREIGN KEY (voided_by) REFERENCES users(id)
+);
+
+-- Void reasons audit table
+CREATE TABLE void_audit_log (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    transaction_id INT,
+    void_reason TEXT,
+    voided_by INT,
+    voided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES sales_transactions(id),
+    FOREIGN KEY (voided_by) REFERENCES users(id)
+);
