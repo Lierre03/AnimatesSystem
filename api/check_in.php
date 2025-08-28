@@ -266,6 +266,10 @@ function handleCheckin() {
         // Create initial status update
         createStatusUpdate($db, $bookingId, 'checked-in', 'Initial check-in completed');
         
+        // Update RFID card to mark it as currently booked
+        $stmt = $db->prepare("UPDATE rfid_cards SET is_currently_booked = 1 WHERE id = ?");
+        $stmt->execute([$rfidCard['id']]);
+        
         // Update booking with welcome email flag
         $stmt = $db->prepare("UPDATE bookings SET welcome_email_sent = 0 WHERE id = ?");
         $stmt->execute([$bookingId]);

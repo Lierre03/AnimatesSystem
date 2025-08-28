@@ -299,6 +299,16 @@ function updateBookingStatus($db, $cardId, $input) {
             WHERE id = ?
         ");
         $stmt->execute([$booking['id']]);
+        
+        // Reset RFID card is_currently_booked flag when service is completed
+        $stmt = $db->prepare("
+            UPDATE rfid_cards 
+            SET is_currently_booked = 0 
+            WHERE custom_uid = ?
+        ");
+        $stmt->execute([$customUID]);
+        
+        error_log("RFID: Reset is_currently_booked to 0 for RFID card: $customUID");
     }
     
     // Update result

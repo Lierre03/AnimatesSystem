@@ -61,6 +61,15 @@ try {
                     payment_date = NOW()
                     WHERE id = ?");
                 $stmt->execute([$paymentMethod, $paymentReference, $paymentPlatform, $amountTendered, $changeAmount, $bookingId]);
+                
+                // Reset RFID card is_currently_booked flag when payment is completed
+                $stmt = $db->prepare("
+                    UPDATE rfid_cards rc 
+                    JOIN bookings b ON rc.id = b.rfid_card_id 
+                    SET rc.is_currently_booked = 0 
+                    WHERE b.id = ?
+                ");
+                $stmt->execute([$bookingId]);
                  
                              // Get the total amount and apply discount
              $stmt = $db->prepare("SELECT total_amount FROM bookings WHERE id = ?");
