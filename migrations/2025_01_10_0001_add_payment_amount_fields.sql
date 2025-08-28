@@ -4,3 +4,4 @@ ADD COLUMN amount_tendered DECIMAL(10,2) NULL AFTER payment_platform,
 ADD COLUMN change_amount DECIMAL(10,2) NULL AFTER amount_tendered;
 
 
+

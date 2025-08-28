@@ -776,6 +776,11 @@ function processPayment() {
         change = amountTendered - totalAmount;
     }
     
+    // Get the discount amount from the bill display
+    const discountElement = document.getElementById('billDiscount');
+    const discountText = discountElement ? discountElement.textContent : '₱0';
+    const discountAmount = parseInt(discountText.replace('₱', '').replace(',', '')) || 0;
+    
     // Debug log
     const paymentData = {
         action: 'process_payment',
@@ -785,9 +790,12 @@ function processPayment() {
         payment_platform: platform,
         amount_tendered: amountTendered,
         change_amount: change,
+        discount_amount: discountAmount,
         send_receipt: true
     };
     console.log('Sending payment data:', paymentData);
+    console.log('Discount amount extracted:', discountAmount);
+    console.log('Discount element text:', discountText);
     
     // Process payment and send receipt
     fetch(`${API_BASE}billing.php`, {

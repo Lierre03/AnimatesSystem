@@ -61,19 +61,35 @@ try {
                     payment_date = NOW()
                     WHERE id = ?");
                 $stmt->execute([$paymentMethod, $paymentReference, $paymentPlatform, $amountTendered, $changeAmount, $bookingId]);
+                 
+                             // Get the total amount and apply discount
+             $stmt = $db->prepare("SELECT total_amount FROM bookings WHERE id = ?");
+             $stmt->execute([$bookingId]);
+             $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+             $totalAmount = $booking['total_amount'];
+             
+             // Get discount amount from the request data
+             $discountAmount = floatval($data['discount_amount'] ?? 0);
+             
+             // Log the received data for debugging
+             error_log("Payment data received - discount_amount: " . ($data['discount_amount'] ?? 'NOT SET'));
+             error_log("Payment data received - full data: " . json_encode($data));
+             
+             // Calculate final amount after discount (tax is inclusive)
+             $finalAmount = $totalAmount - $discountAmount;
+             
+             // Create sales transaction record with the FINAL amount after discount
+             $transactionReference = 'TXN-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 8));
+             $stmt = $db->prepare("INSERT INTO sales_transactions 
+                 (booking_id, transaction_reference, amount, payment_method, payment_platform, discount_amount, status) 
+                 VALUES (?, ?, ?, ?, ?, ?, 'completed')");
+             $stmt->execute([$bookingId, $transactionReference, $finalAmount, $paymentMethod, $paymentPlatform, $discountAmount]);
+             
+             // Log the transaction details for debugging
+             error_log("Sales transaction created - Booking ID: $bookingId, Original: $totalAmount, Discount: $discountAmount, Final: $finalAmount, Transaction Ref: $transactionReference");
                 
-                // Get the total amount for the transaction
-                $stmt = $db->prepare("SELECT total_amount FROM bookings WHERE id = ?");
-                $stmt->execute([$bookingId]);
-                $booking = $stmt->fetch(PDO::FETCH_ASSOC);
-                $totalAmount = $booking['total_amount'];
-                
-                // Create sales transaction record
-                $transactionReference = 'TXN-' . date('Ymd') . '-' . strtoupper(substr(md5(uniqid()), 0, 8));
-                $stmt = $db->prepare("INSERT INTO sales_transactions 
-                    (booking_id, transaction_reference, amount, payment_method, payment_platform, status) 
-                    VALUES (?, ?, ?, ?, ?, 'completed')");
-                $stmt->execute([$bookingId, $transactionReference, $totalAmount, $paymentMethod, $paymentPlatform]);
+                // Log the transaction details for debugging
+                error_log("Payment processed - Booking ID: $bookingId, Original: $totalAmount, Discount: $discountAmount, Final: $finalAmount");
                 
                 // Commit transaction
                 $db->commit();
@@ -165,39 +181,49 @@ try {
         // Format payment info
         $paymentInfo = $booking['payment_method'] ?? $paymentMethod;
         if ($paymentInfo === 'online') {
-            $paymentInfo .= " ($paymentPlatform, Ref: $paymentReference)";
-        }
-        
-        // Output printable receipt HTML
-        echo "<!DOCTYPE html>
-        <html>
-        <head>
-            <title>Animates PH - Receipt #$receiptNumber</title>
-            <style>
-                body {
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                    color: #333;
-                    margin: 0;
-                    padding: 20px;
+                    $paymentInfo .= " ($paymentPlatform, Ref: $paymentReference)";
                 }
-                .receipt {
-                    max-width: 800px;
-                    margin: 0 auto;
-                    border: 1px solid #ddd;
-                    padding: 20px;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 20px;
-                    border-bottom: 2px solid #D4AF37;
-                    padding-bottom: 10px;
-                }
-                .receipt-details table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-                .receipt-details td {
+
+                // Get discount amount from sales_transactions
+                $stmt = $db->prepare("SELECT discount_amount FROM sales_transactions WHERE booking_id = ? ORDER BY id DESC LIMIT 1");
+                $stmt->execute([$bookingId]);
+                $transaction = $stmt->fetch(PDO::FETCH_ASSOC);
+                $discountAmount = $transaction ? floatval($transaction['discount_amount']) : 0;
+                
+                // Calculate final total (tax is inclusive, so no additional tax calculation)
+                $subtotal = $booking['total_amount'];
+                $finalTotal = $subtotal - $discountAmount;
+                
+                // Output printable receipt HTML
+                echo "<!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Animates PH - Receipt #$receiptNumber</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            line-height: 1.6;
+                            color: #333;
+                            margin: 0;
+                            padding: 20px;
+                        }
+                        .receipt {
+                            max-width: 800px;
+                            margin: 0 auto;
+                            border: 1px solid #ddd;
+                            padding: 20px;
+                        }
+                        .header {
+                            text-align: center;
+                            margin-bottom: 20px;
+                            border-bottom: 2px solid #D4AF37;
+                            padding-bottom: 10px;
+                        }
+                        .receipt-details table {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .receipt-details td {
                     padding: 8px;
                     border-bottom: 1px solid #eee;
                 }
@@ -280,6 +306,11 @@ try {
                              <td><strong>Payment Method:</strong></td>
                              <td>$paymentInfo</td>
                          </tr>
+                         " . ($discountAmount > 0 ? "
+                         <tr>
+                             <td><strong>Discount Applied:</strong></td>
+                             <td>₱{$discountAmount}</td>
+                         </tr>" : "") . "
                          " . ($booking['payment_method'] === 'cash' && $booking['amount_tendered'] > 0 ? "
                          <tr>
                              <td><strong>Amount Tendered:</strong></td>
@@ -297,11 +328,28 @@ try {
                      {$booking['services']}
                  </div>
                  
-                 <div class=\"total\">
-                     Total: ₱{$booking['total_amount']}
-                 </div>
-                
-                <div class=\"thank-you\">
+                 " . ($discountAmount > 0 ? "
+                 <div style='background-color: #f8fff8; border: 2px solid #28a745; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center;'>
+                     <h3 style='color: #28a745; margin: 0 0 10px 0;'>🎉 Discount Applied!</h3>
+                     <p style='font-size: 18px; margin: 0; color: #333;'>
+                         You saved <strong>₱{$discountAmount}</strong> on this transaction!
+                     </p>
+                 </div>" : "") . "
+                 
+                                   <div class='total'>
+                      <div style='margin-bottom: 10px;'>
+                          <span>Subtotal: ₱{$subtotal}</span>
+                      </div>
+                      " . ($discountAmount > 0 ? "
+                      <div style='margin-bottom: 10px; color: #28a745;'>
+                          <span>Discount Applied: -₱{$discountAmount}</span>
+                      </div>" : "") . "
+                      <div style='font-size: 20px;'>
+                          <span>Total: ₱{$finalTotal}</span>
+                      </div>
+                  </div>
+                 
+                 <div class=\"thank-you\">
                     Thank you for choosing Animates PH!
                 </div>
                 

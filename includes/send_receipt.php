@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__ . '/email_functions.php';
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../vendor/autoload.php';
 
 /**
  * Send a payment receipt email to the customer
@@ -33,15 +32,30 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
             b.check_in_time,
             b.amount_tendered,
             b.change_amount,
+            
             p.name as pet_name,
             p.type as pet_type,
             p.breed as pet_breed,
             c.name as owner_name,
             c.phone as owner_phone,
-            c.email as owner_email
+            c.email as owner_email,
+            st.amount as sales_transaction_amount,
+            COALESCE(st.discount_amount, 0) as sales_transaction_discount_amount
         FROM bookings b
         JOIN pets p ON b.pet_id = p.id
         JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN (
+            SELECT 
+                st1.booking_id,
+                st1.amount,
+                st1.discount_amount
+            FROM sales_transactions st1
+            INNER JOIN (
+                SELECT booking_id, MAX(id) as max_id
+                FROM sales_transactions
+                GROUP BY booking_id
+            ) st2 ON st1.booking_id = st2.booking_id AND st1.id = st2.max_id
+        ) st ON b.id = st.booking_id
         WHERE b.id = ?");
         
         $stmt->execute([$bookingId]);
@@ -98,10 +112,22 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
             }
         }
         
-        // Calculate tax and subtotal
+        // Calculate subtotal and discount (tax is inclusive)
         $subtotal = $booking['total_amount'];
-        $tax = round($subtotal * 0.12);
-        $discount = 0; // Assuming no discount for now
+        $discount = floatval($booking['sales_transaction_discount_amount'] ?? 0);
+        
+        // Calculate final total after discount (tax is inclusive, so no additional tax)
+        $finalTotal = $subtotal - $discount;
+        
+        // Debug logging
+        error_log("Email Receipt Debug - Booking ID: $bookingId");
+        error_log("Email Receipt Debug - Original Amount: $subtotal");
+        error_log("Email Receipt Debug - Discount Amount: $discount");
+        error_log("Email Receipt Debug - Final Total: $finalTotal");
+        error_log("Email Receipt Debug - Sales Transaction Data: " . json_encode([
+            'amount' => $booking['sales_transaction_amount'],
+            'discount_amount' => $booking['sales_transaction_discount_amount']
+        ]));
         
         // Format date
         $date = new DateTime($booking['check_in_time']);
@@ -154,14 +180,38 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
         if ($paymentPlatform) {
             $paymentInfoHTML .= "<tr><td><strong>Platform:</strong></td><td>$paymentPlatform</td></tr>";
         }
+        if ($discount > 0) {
+            $paymentInfoHTML .= "<tr style='background-color: #f8fff8;'><td><strong>Discount Applied:</strong></td><td style='color: #28a745; font-weight: bold;'>-₱{$discount}</td></tr>";
+        }
         if ($booking['amount_tendered']) {
             $paymentInfoHTML .= "<tr><td><strong>Amount Tendered:</strong></td><td>₱{$booking['amount_tendered']}</td></tr>";
         }
         if ($booking['change_amount']) {
             $paymentInfoHTML .= "<tr><td><strong>Change:</strong></td><td>₱{$booking['change_amount']}</td></tr>";
         }
+
+        // Build discount box HTML
+        $discountBoxHTML = '';
+        if ($discount > 0) {
+            $discountBoxHTML = '
+                <div style="background-color: #f8fff8; border: 2px solid #28a745; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center;">
+                    <h3 style="color: #28a745; margin: 0 0 10px 0;">🎉 Discount Applied!</h3>
+                    <p style="font-size: 18px; margin: 0; color: #333;">
+                        You saved <strong>₱' . $discount . '</strong> on this transaction!
+                    </p>
+                </div>';
+        }
         
-        $emailBody = <<<HTML
+        // Build discount row HTML for total section
+        $discountRowHTML = '';
+        if ($discount > 0) {
+            $discountRowHTML = '
+                    <div style="margin-bottom: 10px; color: #28a745;">
+                        <span>Discount Applied: -₱' . $discount . '</span>
+                    </div>';
+        }
+        
+        $emailBody = '
         <!DOCTYPE html>
         <html>
         <head>
@@ -256,39 +306,41 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                     <p>Camaro Branch</p>
                 </div>
                 
+                ' . $discountBoxHTML . '
+                
                 <div class="receipt-details">
                     <table>
                         <tr>
                             <td><strong>Receipt #:</strong></td>
-                            <td>$receiptNumber</td>
+                            <td>' . $receiptNumber . '</td>
                         </tr>
                         <tr>
                             <td><strong>Date:</strong></td>
-                            <td>$formattedDate</td>
+                            <td>' . $formattedDate . '</td>
                         </tr>
                         <tr>
                             <td><strong>Time:</strong></td>
-                            <td>$formattedTime</td>
+                            <td>' . $formattedTime . '</td>
                         </tr>
                         <tr>
                             <td><strong>Customer:</strong></td>
-                            <td>{$booking['owner_name']}</td>
+                            <td>' . $booking['owner_name'] . '</td>
                         </tr>
                         <tr>
                             <td><strong>Phone:</strong></td>
-                            <td>{$booking['owner_phone']}</td>
+                            <td>' . $booking['owner_phone'] . '</td>
                         </tr>
                         <tr>
                             <td><strong>Pet:</strong></td>
-                            <td>{$booking['pet_name']} ({$booking['pet_type']} - {$booking['pet_breed']})</td>
+                            <td>' . $booking['pet_name'] . ' (' . $booking['pet_type'] . ' - ' . $booking['pet_breed'] . ')</td>
                         </tr>
                         <tr>
                             <td><strong>RFID:</strong></td>
-                            <td>{$booking['custom_rfid']}</td>
+                            <td>' . $booking['custom_rfid'] . '</td>
                         </tr>
                         <tr>
                             <td><strong>Check-in Time:</strong></td>
-                            <td>$formattedDate $formattedTime</td>
+                            <td>' . $formattedDate . ' ' . $formattedTime . '</td>
                         </tr>
                     </table>
                 </div>
@@ -305,30 +357,25 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                             </tr>
                         </thead>
                         <tbody>
-                            $servicesHTML
+                            ' . $servicesHTML . '
                         </tbody>
                     </table>
                 </div>
                 
                 <div class="total">
                     <div style="margin-bottom: 10px;">
-                        <span>Subtotal: ₱$subtotal</span>
+                        <span>Subtotal: ₱' . $subtotal . '</span>
                     </div>
-                    <div style="margin-bottom: 10px;">
-                        <span>Discount: ₱$discount</span>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <span>Tax (12%): ₱$tax</span>
-                    </div>
+                    ' . $discountRowHTML . '
                     <div style="font-size: 20px;">
-                        <span>Total: ₱{$booking['total_amount']}</span>
+                        <span>Total: ₱' . $finalTotal . '</span>
                     </div>
                 </div>
                 
                 <div class="payment-info">
                     <h3>Payment Details</h3>
                     <table>
-                        $paymentInfoHTML
+                        ' . $paymentInfoHTML . '
                     </table>
                 </div>
                 
@@ -342,8 +389,7 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                 </div>
             </div>
         </body>
-        </html>
-        HTML;
+        </html>';
         
         $mail->Body = $emailBody;
         $mail->AltBody = "Payment Receipt #$receiptNumber\n\n" .
@@ -352,7 +398,9 @@ function sendPaymentReceipt($bookingId, $paymentMethod, $paymentReference = null
                         "Pet: {$booking['pet_name']} ({$booking['pet_type']} - {$booking['pet_breed']})\n" .
                         "RFID: {$booking['custom_rfid']}\n" .
                         "Payment Method: $paymentInfo\n" .
-                        "Total: ₱{$booking['total_amount']}\n\n" .
+                        "Subtotal: ₱{$subtotal}\n" .
+                        ($discount > 0 ? "Discount: -₱{$discount}\n" : "") .
+                        "Total: ₱{$finalTotal}\n\n" .
                         "Thank you for choosing Animates PH!";
         
         $mail->send();

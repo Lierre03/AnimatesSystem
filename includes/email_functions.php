@@ -1,5 +1,5 @@
 <?php
-require_once '../vendor/autoload.php'; // For PHPMailer
+require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
