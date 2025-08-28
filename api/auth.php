@@ -18,10 +18,11 @@ function handleCreateUser($input) {
     try {
         requireAdmin();
         $db = getDB();
-        $required = ['first_name','last_name','email','phone','role'];
-        foreach ($required as $f) { if (empty(trim($input[$f] ?? ''))) throw new Exception(ucfirst($f).' is required'); }
+        // Validate inputs from admin form
+        $required = ['first_name','last_name','email','role'];
+        foreach ($required as $f) { if (empty(trim($input[$f] ?? ''))) throw new Exception(ucfirst(str_replace('_',' ', $f)).' is required'); }
         if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) { throw new Exception('Invalid email'); }
-        if (!in_array($input['role'], ['admin','staff','customer'])) { throw new Exception('Invalid role'); }
+        if (!in_array($input['role'], ['admin','staff','customer','cashier'])) { throw new Exception('Invalid role'); }
         if ($input['role'] === 'staff') {
             $validStaff = ['cashier','receptionist','groomer','bather','manager'];
             if (!in_array(($input['staff_role'] ?? ''), $validStaff)) { throw new Exception('Invalid staff role'); }
@@ -32,18 +33,30 @@ function handleCreateUser($input) {
         $password = $input['password'] ?? bin2hex(random_bytes(4));
         if (strlen($password) < 8) { $password = $password . 'A1!a'; }
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO users (first_name,last_name,email,phone,address,role,staff_role,password_hash,email_verified,is_active) VALUES (?,?,?,?,?,?,?,?,1,1)");
+        $fullName = trim(($input['first_name'] ?? '').' '.($input['last_name'] ?? ''));
+        $username = $input['username'] ?? explode('@', $input['email'])[0];
+        // Determine role to persist; map staff+staff_role=cashier to top-level cashier
+        $incomingRole = $input['role'];
+        $incomingStaffRole = $input['staff_role'] ?? null;
+        $roleToSave = ($incomingRole === 'cashier')
+            ? 'cashier'
+            : (($incomingRole === 'staff' && $incomingStaffRole === 'cashier') ? 'cashier' : $incomingRole);
+
+        // Insert using current schema columns
+        $stmt = $db->prepare("INSERT INTO users (full_name,email,role,username,password,is_active) VALUES (?,?,?,?,?,1)");
         $stmt->execute([
-            $input['first_name'],
-            $input['last_name'],
+            $fullName,
             $input['email'],
-            $input['phone'],
-            $input['address'] ?? null,
-            $input['role'],
-            $input['role'] === 'staff' ? ($input['staff_role'] ?? null) : null,
+            // Persist resolved role
+            $roleToSave,
+            $username,
             $passwordHash
         ]);
-        echo json_encode(['success'=>true,'message'=>'User created','temporary_password'=>$input['password'] ? null : $password]);
+        $newUserId = $db->lastInsertId();
+        $check = $db->prepare("SELECT id, full_name, email, role, is_active, username FROM users WHERE id = ?");
+        $check->execute([$newUserId]);
+        $createdUser = $check->fetch(PDO::FETCH_ASSOC);
+        echo json_encode(['success'=>true,'message'=>'User created','temporary_password'=>$input['password'] ? null : $password,'user'=>$createdUser]);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -57,11 +70,12 @@ function handleListUsers($input) {
         requireAdmin();
         $db = getDB();
         $role = $input['filter_role'] ?? null;
-        if ($role) {
-            $stmt = $db->prepare("SELECT id,first_name,last_name,email,phone,role,staff_role,is_active,created_at FROM users WHERE role = ? ORDER BY created_at DESC");
+        $validRoles = ['admin','cashier','customer'];
+        if ($role && in_array($role, $validRoles, true)) {
+            $stmt = $db->prepare("SELECT id,full_name,email,role,is_active,username FROM users WHERE role = ? ORDER BY id DESC");
             $stmt->execute([$role]);
         } else {
-            $stmt = $db->query("SELECT id,first_name,last_name,email,phone,role,staff_role,is_active,created_at FROM users ORDER BY created_at DESC");
+            $stmt = $db->query("SELECT id,full_name,email,role,is_active,username FROM users ORDER BY id DESC");
         }
         echo json_encode(['success'=>true,'users'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]);
         exit;
@@ -79,20 +93,19 @@ function handleUpdateUserRole($input) {
         $userId = (int)($input['user_id'] ?? 0);
         if (!$userId) throw new Exception('user_id is required');
         $role = $input['role'] ?? null;
-        $staffRole = $input['staff_role'] ?? null;
-        if ($role && !in_array($role, ['admin','staff','customer'])) throw new Exception('Invalid role');
-        if ($role === 'staff') {
-            $validStaff = ['cashier','receptionist','groomer','bather','manager'];
-            if ($staffRole && !in_array($staffRole, $validStaff)) throw new Exception('Invalid staff role');
-        }
+        if ($role && !in_array($role, ['admin','staff','customer','cashier'])) throw new Exception('Invalid role');
         if ($role) {
-            $stmt = $db->prepare("UPDATE users SET role = ?, staff_role = ? WHERE id = ?");
-            $stmt->execute([$role, $role === 'staff' ? $staffRole : null, $userId]);
-        } else if ($staffRole) {
-            $stmt = $db->prepare("UPDATE users SET staff_role = ? WHERE id = ? AND role = 'staff'");
-            $stmt->execute([$staffRole, $userId]);
+            $stmt = $db->prepare("UPDATE users SET role = ? WHERE id = ?");
+            $stmt->execute([$role, $userId]);
+            $updated = $stmt->rowCount();
+            // Read-back to confirm
+            $check = $db->prepare("SELECT id, email, role FROM users WHERE id = ?");
+            $check->execute([$userId]);
+            $user = $check->fetch(PDO::FETCH_ASSOC);
+            echo json_encode(['success'=>true,'rows_affected'=>$updated,'user'=>$user]);
+            exit;
         }
-        echo json_encode(['success'=>true]);
+        echo json_encode(['success'=>false,'error'=>'No role provided']);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -108,9 +121,39 @@ function handleDeactivateUser($input) {
         $userId = (int)($input['user_id'] ?? 0);
         $active = isset($input['active']) ? (int)!!$input['active'] : 0;
         if (!$userId) throw new Exception('user_id is required');
+        // Determine current admin making the request
+        $token = getBearerToken();
+        $decoded = verifyJWT($token);
+
+        // Fetch target user's role and status
+        $check = $db->prepare("SELECT id, role, is_active FROM users WHERE id = ?");
+        $check->execute([$userId]);
+        $target = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$target) { throw new Exception('User not found'); }
+
+        // Prevent deactivating yourself
+        if ($active === 0 && (int)$decoded->user_id === (int)$userId) {
+            throw new Exception('You cannot deactivate your own account');
+        }
+
+        // Prevent deactivating the last active admin
+        if ($active === 0 && $target['role'] === 'admin') {
+            $cnt = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1")->fetchColumn();
+            if ($cnt <= 1) {
+                throw new Exception('Cannot deactivate the last active admin');
+            }
+        }
+
+        // Perform update
         $stmt = $db->prepare("UPDATE users SET is_active = ? WHERE id = ?");
         $stmt->execute([$active, $userId]);
-        echo json_encode(['success'=>true]);
+
+        // Return updated user
+        $refetch = $db->prepare("SELECT id, full_name, email, role, is_active, username FROM users WHERE id = ?");
+        $refetch->execute([$userId]);
+        $updated = $refetch->fetch(PDO::FETCH_ASSOC);
+
+        echo json_encode(['success'=>true, 'user'=>$updated]);
         exit;
     } catch (Exception $e) {
         http_response_code(400);

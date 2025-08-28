@@ -6,7 +6,7 @@
   const dlg = document.getElementById('dlg');
   const frm = document.getElementById('frm');
   const roleSel = document.getElementById('role');
-  const staffRoleSel = document.getElementById('staff_role');
+  const staffRoleSel = null; // removed
   const btnCancel = document.getElementById('btnCancel');
   const totalUsersEl = document.getElementById('totalUsers');
   const activeUsersEl = document.getElementById('activeUsers');
@@ -84,17 +84,22 @@
     }
     
     users.forEach(u => {
+      const displayName = (typeof u.full_name === 'string' && u.full_name.trim())
+        ? u.full_name.trim()
+        : ((typeof u.username === 'string' && u.username.trim()) ? u.username.trim() : 'User');
+      const initial = displayName.charAt(0).toUpperCase();
       const card = document.createElement('div');
       card.className = 'bg-white/80 backdrop-blur-sm border border-gray-200 rounded-xl p-4 hover:shadow-md transition-all duration-200';
+      if (u.id) { card.setAttribute('data-user-id', String(u.id)); }
       card.innerHTML = `
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div class="flex-1">
             <div class="flex items-center gap-3 mb-2">
               <div class="w-10 h-10 bg-gradient-to-br from-gold-100 to-gold-200 rounded-full flex items-center justify-center">
-                <span class="text-gold-700 font-semibold text-sm">${u.first_name.charAt(0)}${u.last_name.charAt(0)}</span>
+                <span class="text-gold-700 font-semibold text-sm">${initial}</span>
               </div>
               <div>
-                <div class="font-semibold text-gray-900">${u.first_name} ${u.last_name}</div>
+                <div class="font-semibold text-gray-900">${displayName}</div>
                 <div class="text-sm text-gray-600">${u.email}</div>
               </div>
             </div>
@@ -103,7 +108,7 @@
               ${u.address ? `<span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg> ${u.address}</span>` : ''}
             </div>
             <div class="flex items-center gap-2">
-              ${getRoleBadge(u.role, u.staff_role, u.is_active)}
+              ${getRoleBadge(u.role, null, u.is_active)}
             </div>
           </div>
           <div class="flex items-center gap-2">
@@ -114,7 +119,7 @@
               </svg>
               Role
             </button>
-            <button data-act="toggle" data-id="${u.id}" class="px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${u.is_active ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}">
+            <button data-act="toggle" data-id="${u.id}" data-active="${u.is_active ? 1 : 0}" class="px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${u.is_active ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}">
               <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 ${u.is_active ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>'}
               </svg>
@@ -129,7 +134,9 @@
   }
 
   function load() {
-    authFetch({ action: 'list_users', filter_role: filterRole.value || undefined })
+    const val = filterRole.value;
+    const valid = val && ['admin','cashier','customer'].includes(val) ? val : undefined;
+    authFetch({ action: 'list_users', filter_role: valid })
       .then(d => render(d.users))
       .catch(e => {
         console.error('Error loading users:', e);
@@ -141,19 +148,16 @@
   filterRole.addEventListener('change', load);
   btnNew.addEventListener('click', () => { 
     frm.reset(); 
-    roleSel.value = 'staff'; 
-    staffRoleSel.disabled = false; 
+    roleSel.value = 'cashier'; 
     dlg.showModal(); 
   });
   btnCancel.addEventListener('click', () => dlg.close());
 
-  roleSel.addEventListener('change', () => {
-    staffRoleSel.disabled = roleSel.value !== 'staff';
-  });
-  staffRoleSel.disabled = roleSel.value !== 'staff';
+  // No second dropdown anymore
 
   frm.addEventListener('submit', (e) => {
     e.preventDefault();
+    const selectedRole = roleSel.value;
     const payload = {
       action: 'create_user',
       first_name: document.getElementById('first_name').value.trim(),
@@ -161,10 +165,10 @@
       email: document.getElementById('email').value.trim(),
       phone: document.getElementById('phone').value.trim(),
       address: document.getElementById('address').value.trim(),
-      role: roleSel.value,
-      staff_role: staffRoleSel.value || undefined,
+      role: selectedRole,
       password: document.getElementById('password').value.trim() || undefined
     };
+    // No staff_role submitted anymore
     authFetch(payload)
       .then(d => { 
         dlg.close(); 
@@ -184,18 +188,41 @@
   listEl.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
-    const id = parseInt(btn.getAttribute('data-id'), 10);
+    let id = parseInt(btn.getAttribute('data-id'), 10);
+    if (Number.isNaN(id)) {
+      const holder = btn.closest('[data-user-id]');
+      if (holder) {
+        // Strip non-digits just in case
+        const raw = holder.getAttribute('data-user-id') || '';
+        const digits = raw.match(/\d+/);
+        if (digits) id = parseInt(digits[0], 10);
+      }
+    }
     const act = btn.getAttribute('data-act');
+    if (Number.isNaN(id)) {
+      alert('Unable to determine user id for this action. Please refresh the page and try again.');
+      return;
+    }
     
     if (act === 'toggle') {
-      const activate = btn.textContent === 'Activate' ? 1 : 0;
+      const current = parseInt(btn.getAttribute('data-active') || '0', 10);
+      const activate = current ? 0 : 1; // toggle
       const action = activate ? 'activate' : 'deactivate';
       
       if (confirm(`Are you sure you want to ${action} this user?`)) {
         authFetch({ action: 'deactivate_user', user_id: id, active: activate })
-          .then(() => {
-            load();
+          .then((res) => {
+            // Update button state immediately for snappy UI, then reload
+            btn.setAttribute('data-active', String(activate));
+            btn.className = `px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activate ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-green-600 hover:bg-green-700 text-white'}`;
+            btn.innerHTML = `
+              <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                ${activate ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636"></path>' : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>'}
+              </svg>
+              ${activate ? 'Deactivate' : 'Activate'}
+            `;
             alert(`User ${action}d successfully!`);
+            load();
           })
           .catch(err => {
             console.error('Error updating user status:', err);
@@ -203,18 +230,10 @@
           });
       }
     } else if (act === 'role') {
-      const role = prompt('Set role: admin | staff | customer');
-      if (!role || !['admin', 'staff', 'customer'].includes(role)) return;
-      
-      let staffRole;
-      if (role === 'staff') {
-        const staffRoles = ['manager', 'cashier', 'receptionist', 'groomer', 'bather'];
-        staffRole = prompt(`Staff role: ${staffRoles.join(' | ')}`) || '';
-        if (staffRole && !staffRoles.includes(staffRole)) return;
-      }
-      
-      if (confirm(`Change user role to ${role}${staffRole ? ` (${staffRole})` : ''}?`)) {
-        authFetch({ action: 'update_user_role', user_id: id, role, staff_role: staffRole || undefined })
+      const role = prompt('Set role: admin | cashier | customer');
+      if (!role || !['admin', 'cashier', 'customer'].includes(role)) return;
+      if (confirm(`Change user role to ${role}?`)) {
+        authFetch({ action: 'update_user_role', user_id: id, role })
           .then(() => {
             load();
             alert('User role updated successfully!');

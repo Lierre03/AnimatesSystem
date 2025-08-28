@@ -57,13 +57,49 @@ document.addEventListener('DOMContentLoaded', async function() {
     await checkAuth();
     await loadStats();
     await loadPendingBills();
-    await loadPaymentProcessing();
+    // Only load the payment processing widget if its container exists on this page
+    if (document.getElementById('paymentProcessingContainer')) {
+        await loadPaymentProcessing();
+    }
     
     // Initialize with manual billing section
     showSection('manual-billing');
     
     // Set up payment method change handler
     document.getElementById('paymentMethod').addEventListener('change', handlePaymentMethodChange);
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        try {
+            localStorage.clear();
+        } catch (_) {}
+        window.location.replace('admin_staff_auth.html');
+    });
+
+    // Make stat cards clickable
+    document.getElementById('pendingBillsCard')?.addEventListener('click', () => {
+        showSection('pending-bills');
+    });
+    document.getElementById('processingBillsCard')?.addEventListener('click', () => {
+        showSection('pending-bills');
+        setTimeout(() => {
+            const el = document.getElementById('pendingBillsStatusFilter');
+            if (el) { el.value = 'in_progress'; el.dispatchEvent(new Event('change')); }
+        }, 100);
+    });
+    document.getElementById('todayRevenueCard')?.addEventListener('click', () => {
+        showSection('recent-transactions');
+        // Optionally set date filter to today
+        setTimeout(() => {
+            const el = document.getElementById('dateFilter');
+            if (el) { el.value = 'today'; el.dispatchEvent(new Event('change')); }
+        }, 100);
+    });
+    document.getElementById('weekRevenueCard')?.addEventListener('click', () => {
+        showSection('recent-transactions');
+        setTimeout(() => {
+            const el = document.getElementById('dateFilter');
+            if (el) { el.value = 'week'; el.dispatchEvent(new Event('change')); }
+        }, 100);
+    });
 });
 
 // Authentication check
@@ -77,9 +113,11 @@ async function checkAuth() {
         return false;
     }
     
-    // Check if user has access to billing (admin or cashier)
-    if (role !== 'admin' && staffRole !== 'cashier') {
-        alert('Access denied. Only admin and cashier staff can access billing management.');
+    // Check if user has access to billing (admin or cashier). Support both top-level role and legacy staff_role.
+    const isAdmin = role === 'admin';
+    const isCashier = role === 'cashier' || staffRole === 'cashier';
+    if (!isAdmin && !isCashier) {
+        alert('Access denied. Only admin and cashier can access billing management.');
         redirectToAuth();
         return false;
     }
@@ -87,7 +125,9 @@ async function checkAuth() {
     // Set current user from localStorage
     currentUser = {
         id: localStorage.getItem('auth_user_id') || 'unknown',
-        email: localStorage.getItem('auth_email'),
+        email: localStorage.getItem('auth_email') || '',
+        username: localStorage.getItem('auth_username') || '',
+        full_name: localStorage.getItem('auth_full_name') || '',
         role: role,
         staff_role: staffRole
     };
@@ -99,12 +139,20 @@ async function checkAuth() {
 // Update user information display
 function updateUserInfo() {
     if (currentUser) {
-        const userName = currentUser.email.split('@')[0];
-        const userInitial = userName.charAt(0).toUpperCase();
-        
-        document.getElementById('userName').textContent = userName;
-        document.getElementById('userRole').textContent = currentUser.staff_role === 'cashier' ? 'Cashier' : 'Admin';
-        document.getElementById('userInitials').textContent = userInitial;
+        const preferredName = (currentUser.full_name && currentUser.full_name.trim())
+            ? currentUser.full_name.trim()
+            : ((currentUser.username && currentUser.username.trim())
+                ? currentUser.username.trim()
+                : (currentUser.email ? currentUser.email.split('@')[0] : 'User'));
+        const userInitial = preferredName.charAt(0).toUpperCase();
+
+        const nameEl = document.getElementById('userName');
+        const roleEl = document.getElementById('userRole');
+        const initEl = document.getElementById('userInitials');
+        if (nameEl) nameEl.textContent = preferredName;
+        const roleLabel = currentUser.role === 'admin' ? 'Admin' : (currentUser.role === 'cashier' || currentUser.staff_role === 'cashier' ? 'Cashier' : 'Staff');
+        if (roleEl) roleEl.textContent = roleLabel;
+        if (initEl) initEl.textContent = userInitial;
     }
 }
 
@@ -117,11 +165,49 @@ function redirectToAuth() {
 // Load statistics
 async function loadStats() {
     try {
-        // In a real system, this would fetch from API
-        document.getElementById('todayRevenue').textContent = '₱8,450';
-        document.getElementById('pendingBills').textContent = '7';
-        document.getElementById('processingBills').textContent = '3';
-        document.getElementById('weekRevenue').textContent = '₱42,350';
+        // Fetch pending bills and transactions in parallel
+        const [pendingRes, txRes] = await Promise.all([
+            fetch(`${API_BASE}billing.php?action=get_pending_bills`),
+            fetch(`${API_BASE}billing.php?action=get_transactions`)
+        ]);
+        const [pendingData, txData] = await Promise.all([
+            pendingRes.json(),
+            txRes.json()
+        ]);
+
+        // Pending/processing counts
+        const bills = Array.isArray(pendingData?.pending_bills) ? pendingData.pending_bills : [];
+        const pendingCount = bills.filter(b => (b.payment_status || 'pending') !== 'paid').length;
+        const inProgressCount = bills.filter(b => b.status === 'in_progress').length;
+
+        // Revenue: sum completed transactions amounts for today and last 7 days
+        const txs = Array.isArray(txData?.transactions) ? txData.transactions : [];
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const sum = (arr) => arr.reduce((acc, n) => acc + (parseFloat(n) || 0), 0);
+
+        const completedTxs = txs.filter(t => (t.status || '').toLowerCase() === 'completed');
+        const todayAmounts = completedTxs
+            .filter(t => {
+                const d = new Date(t.created_at);
+                return d >= startOfToday;
+            })
+            .map(t => t.amount);
+        const weekAmounts = completedTxs
+            .filter(t => {
+                const d = new Date(t.created_at);
+                return d >= sevenDaysAgo;
+            })
+            .map(t => t.amount);
+
+        const todayRevenue = sum(todayAmounts);
+        const weekRevenue = sum(weekAmounts);
+
+        document.getElementById('todayRevenue').textContent = '₱' + todayRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        document.getElementById('weekRevenue').textContent = '₱' + weekRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        document.getElementById('pendingBills').textContent = pendingCount;
+        document.getElementById('processingBills').textContent = inProgressCount;
     } catch (error) {
         console.error('Error loading stats:', error);
     }
@@ -1770,10 +1856,17 @@ async function loadTransactions() {
         
         if (data.success) {
             if (data.transactions && Array.isArray(data.transactions)) {
-                currentTransactions = data.transactions;
+                // Deduplicate by booking_id (fallback to rfid_tag)
+                const seenKeys = new Set();
+                currentTransactions = data.transactions.filter(t => {
+                    const key = t.booking_id ?? t.rfid_tag;
+                    if (seenKeys.has(key)) return false;
+                    seenKeys.add(key);
+                    return true;
+                });
                 displayTransactions();
                 
-                if (data.transactions.length === 0) {
+                if (currentTransactions.length === 0) {
                     showNotification('No transactions found', 'info');
                 }
             } else {
@@ -1838,7 +1931,8 @@ function displayTransactions() {
     // Populate table
     pageTransactions.forEach(transaction => {
         const row = document.createElement('tr');
-        row.className = 'hover:bg-gray-50';
+        row.className = 'hover:bg-gray-50 cursor-pointer';
+        row.onclick = () => openReceiptModal(transaction.booking_id);
         
         const statusClass = getStatusClass(transaction.status);
         const statusText = getStatusText(transaction.status);
@@ -1869,10 +1963,8 @@ function displayTransactions() {
             </td>
             <td class="px-4 py-3 text-center">
                 ${transaction.status === 'completed' ? 
-                    `<button onclick="voidTransaction(${transaction.id})" 
-                             class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">
-                        Void
-                    </button>` : 
+                    `<button onclick="event.stopPropagation(); voidTransaction(${transaction.id})" 
+                             class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">Void</button>` : 
                     '<span class="text-gray-400 text-xs">-</span>'
                 }
             </td>
@@ -2058,6 +2150,24 @@ function exportTransactions() {
     }
 }
 
+// Export transactions to Excel (auto-fit columns)
+function exportTransactionsExcel() {
+    try {
+        showNotification('Preparing Excel export...', 'info');
+        const exportUrl = `${API_BASE}billing.php?action=export_transactions_excel`;
+        const link = document.createElement('a');
+        link.href = exportUrl;
+        link.download = `transactions_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('Excel export started', 'success');
+    } catch (error) {
+        console.error('Error exporting transactions (Excel):', error);
+        showNotification('Failed to export transactions (Excel)', 'error');
+    }
+}
+
 // Event listeners for transaction management
 document.addEventListener('DOMContentLoaded', function() {
     // Add event listeners for search and filters
@@ -2079,3 +2189,72 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add void form submission handler
     document.getElementById('voidForm')?.addEventListener('submit', handleVoidSubmission);
 });
+
+function openReceiptModal(bookingId) {
+    if (!bookingId) return;
+    const modal = document.getElementById('receiptModal');
+    const frame = document.getElementById('receiptFrame');
+    frame.dataset.bookingId = bookingId;
+    // Show receipt exactly as standalone page would render (no scaling)
+    frame.dataset.scale = '1';
+    frame.style.transform = 'none';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            // Allow the iframe to scroll exactly like a standalone page
+            doc.body.style.overflow = 'auto';
+            doc.documentElement.style.overflow = 'auto';
+            // Hide thank-you section and print button when embedded in modal
+            try {
+                const thankYou = doc.querySelector('.thank-you');
+                if (thankYou) thankYou.style.display = 'none';
+                const printBtnSection = doc.querySelector('.no-print');
+                if (printBtnSection) printBtnSection.style.display = 'none';
+            } catch (_) {}
+        } catch (e) {
+            // Cross-origin safety: ignore
+        }
+    };
+    // Load printable page in embed mode to hide modal-only footer/print
+    frame.src = `${API_BASE}billing.php?action=print_receipt&booking_id=${encodeURIComponent(bookingId)}&embed=1`;
+    modal.classList.remove('hidden');
+}
+
+function closeReceiptModal() {
+    const modal = document.getElementById('receiptModal');
+    const frame = document.getElementById('receiptFrame');
+    frame.src = 'about:blank';
+    modal.classList.add('hidden');
+}
+
+// zoomReceipt removed per request (fixed real-size view)
+
+function openReceiptNewTab() {
+    // Deprecated: opening in new tab removed; modal shows same printable layout embedded
+}
+
+function printReceiptFromModal() {
+    const frame = document.getElementById('receiptFrame');
+    try {
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        } else {
+            throw new Error('No frame contentWindow');
+        }
+    } catch (e) {
+        console.warn('Unable to print from iframe:', e);
+        // Fallback: open standalone receipt without embed flag
+        try {
+            const src = frame ? frame.getAttribute('src') : '';
+            if (src && src !== 'about:blank') {
+                const standalone = src.replace(/([&?])embed=1(&|$)/, '$1').replace(/[&?]$/, '');
+                window.open(standalone, '_blank');
+            }
+        } catch (_) {}
+    }
+}
+
+// Fit-to-container logic removed to mirror standalone receipt exactly

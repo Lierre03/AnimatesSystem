@@ -76,6 +76,7 @@
                     <div class="w-8 h-8 bg-gradient-to-br from-gold-500 to-gold-600 rounded-full flex items-center justify-center text-white font-medium text-sm" id="userInitials">
                         C
                     </div>
+                    <button id="logoutBtn" class="ml-2 px-2 py-1 text-xs border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 hidden sm:block">Sign out</button>
                 </div>
             </div>
         </div>
@@ -85,7 +86,7 @@
         <div class="max-w-7xl mx-auto">
         <!-- Compact Stats Overview -->
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4">
+                <div id="todayRevenueCard" class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4 cursor-pointer">
                 <div class="flex items-center">
                         <div class="p-2 bg-green-100 rounded-lg">
                         <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,7 +100,7 @@
                 </div>
             </div>
 
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4">
+                <div id="pendingBillsCard" class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4 cursor-pointer">
                 <div class="flex items-center">
                         <div class="p-2 bg-blue-100 rounded-lg">
                         <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,7 +114,7 @@
                 </div>
             </div>
 
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4">
+                <div id="voidsCard" class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4 cursor-pointer">
                 <div class="flex items-center">
                         <div class="p-2 bg-yellow-100 rounded-lg">
                         <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,13 +122,13 @@
                         </svg>
                     </div>
                     <div class="ml-3">
-                        <p class="text-xs font-medium text-gray-600">Processing</p>
-                            <p class="text-lg font-bold text-gray-900" id="processingBills">0</p>
+                        <p class="text-xs font-medium text-gray-600">Voids</p>
+                            <p class="text-lg font-bold text-gray-900" id="voidCount">0</p>
                     </div>
                 </div>
             </div>
 
-                <div class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4">
+                <div id="weekRevenueCard" class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-4 cursor-pointer">
                 <div class="flex items-center">
                         <div class="p-2 bg-purple-100 rounded-lg">
                         <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -521,6 +522,41 @@
                 </div>
             </div>
         </section>
+
+        <!-- Voided Transactions Section -->
+        <section id="voided-transactions" class="section hidden">
+            <div class="bg-white/90 backdrop-blur-sm rounded-xl card-shadow border border-gold-100/50 p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-900 flex items-center gap-2">
+                        <div class="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+                            <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.5 5.5l13 13" />
+                            </svg>
+                        </div>
+                        Voided Transactions
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button onclick="loadVoidedTransactions()" class="px-3 py-1 bg-gold-500 hover:bg-gold-600 text-white rounded-lg text-xs font-medium transition-colors">Refresh</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Date/Time</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Customer</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">Pet</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-600">RFID</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-600">Amount</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-600">Method</th>
+                                <th class="px-4 py-3 text-center text-xs font-medium text-gray-600">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="voidedTable" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
     </div>
     </main>
 
@@ -544,6 +580,22 @@
                         Continue
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div id="receiptModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-0 max-w-3xl w-full mx-4 card-shadow overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 border-b">
+                <h3 class="text-lg font-semibold text-gray-900">Receipt</h3>
+                <div class="flex items-center gap-2">
+                    <button onclick="printReceiptFromModal()" class="px-2 py-1 text-sm border rounded hover:bg-gray-50">Print</button>
+                    <button onclick="closeReceiptModal()" class="ml-2 text-gray-500 hover:text-gray-700">✕</button>
+                </div>
+            </div>
+            <div id="receiptContainer" class="w-full overflow-auto bg-gray-50" style="height:85vh;">
+                <iframe id="receiptFrame" class="w-full" scrolling="auto" style="height:100%; border:0; background:white; display:block;"></iframe>
             </div>
         </div>
     </div>
