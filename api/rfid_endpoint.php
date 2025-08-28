@@ -23,17 +23,52 @@ try {
         throw new Exception('Invalid JSON data');
     }
     
+    // Normalize and validate input to be tolerant of device payloads
+    // Fallbacks and coercions
+    $normalized = [];
+    $normalized['card_uid'] = isset($input['card_uid']) ? trim((string)$input['card_uid']) : '';
+    $normalized['custom_uid'] = isset($input['custom_uid']) ? strtoupper(trim((string)$input['custom_uid'])) : '';
+    // Accept either tap_count or tap_number; coerce to int and clamp 1..5
+    $tapCountIncoming = null;
+    if (isset($input['tap_count'])) {
+        $tapCountIncoming = (int)$input['tap_count'];
+    } elseif (isset($input['tap_number'])) {
+        $tapCountIncoming = (int)$input['tap_number'];
+    }
+    if (!is_int($tapCountIncoming) || $tapCountIncoming <= 0) {
+        $tapCountIncoming = 1;
+    }
+    if ($tapCountIncoming > 5) {
+        $tapCountIncoming = 5;
+    }
+    $normalized['tap_count'] = $tapCountIncoming;
+    $normalized['tap_number'] = $tapCountIncoming;
+    $normalized['max_taps'] = isset($input['max_taps']) ? (int)$input['max_taps'] : 5;
+    if ($normalized['max_taps'] <= 0) { $normalized['max_taps'] = 5; }
+    $normalized['device_info'] = isset($input['device_info']) ? trim((string)$input['device_info']) : null;
+    $normalized['wifi_network'] = $input['wifi_network'] ?? null;
+    $normalized['signal_strength'] = isset($input['signal_strength']) ? (int)$input['signal_strength'] : null;
+    $normalized['validation_status'] = isset($input['validation_status']) ? (string)$input['validation_status'] : 'approved';
+    $normalized['readable_time'] = isset($input['readable_time']) ? (string)$input['readable_time'] : null;
+    $normalized['timestamp_value'] = isset($input['timestamp_value']) ? (string)$input['timestamp_value'] : null;
+    $normalized['rfid_scanner_status'] = isset($input['rfid_scanner_status']) ? (string)$input['rfid_scanner_status'] : null;
+
+    // Basic required fields check
+    if ($normalized['card_uid'] === '' || $normalized['custom_uid'] === '') {
+        throw new Exception('Missing required fields: card_uid/custom_uid');
+    }
+
     // Start transaction
     $db->beginTransaction();
     
     // 1. Insert/Update RFID card record
-    $cardId = handleRFIDCard($db, $input);
+    $cardId = handleRFIDCard($db, $normalized);
     
     // 2. Insert tap history
-    insertTapHistory($db, $cardId, $input);
+    insertTapHistory($db, $cardId, $normalized);
     
     // 3. Update booking status based on tap count
-    $bookingResult = updateBookingStatus($db, $cardId, $input);
+    $bookingResult = updateBookingStatus($db, $cardId, $normalized);
     
     // Commit transaction before sending email
     $db->commit();
@@ -70,8 +105,8 @@ try {
     echo json_encode([
         'success' => true,
         'card_id' => $cardId,
-        'custom_uid' => $input['custom_uid'],
-        'tap_count' => $input['tap_count'],
+        'custom_uid' => $normalized['custom_uid'],
+        'tap_count' => $normalized['tap_count'],
         'booking_updated' => $bookingResult['updated'],
         'booking_id' => $bookingResult['booking_id'],
         'status_changed_to' => $bookingResult['new_status'],

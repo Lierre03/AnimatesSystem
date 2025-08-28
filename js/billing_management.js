@@ -77,9 +77,11 @@ async function checkAuth() {
         return false;
     }
     
-    // Check if user has access to billing (admin or cashier)
-    if (role !== 'admin' && staffRole !== 'cashier') {
-        alert('Access denied. Only admin and cashier staff can access billing management.');
+    // Check if user has access to billing (admin or cashier). Support both top-level role and legacy staff_role.
+    const isAdmin = role === 'admin';
+    const isCashier = role === 'cashier' || staffRole === 'cashier';
+    if (!isAdmin && !isCashier) {
+        alert('Access denied. Only admin and cashier can access billing management.');
         redirectToAuth();
         return false;
     }
@@ -103,7 +105,8 @@ function updateUserInfo() {
         const userInitial = userName.charAt(0).toUpperCase();
         
         document.getElementById('userName').textContent = userName;
-        document.getElementById('userRole').textContent = currentUser.staff_role === 'cashier' ? 'Cashier' : 'Admin';
+        const roleLabel = currentUser.role === 'admin' ? 'Admin' : (currentUser.role === 'cashier' || currentUser.staff_role === 'cashier' ? 'Cashier' : 'Staff');
+        document.getElementById('userRole').textContent = roleLabel;
         document.getElementById('userInitials').textContent = userInitial;
     }
 }

@@ -16,12 +16,16 @@ function setRole(role) {
     tabStaff.classList.remove('tab-active');
     tabStaff.classList.add('tab-inactive');
     emailInput.placeholder = 'admin@animates.ph';
+    const badge = document.getElementById('roleBadge');
+    if (badge) badge.textContent = 'Admin Only';
   } else {
     tabStaff.classList.remove('tab-inactive');
     tabStaff.classList.add('tab-active');
     tabAdmin.classList.remove('tab-active');
     tabAdmin.classList.add('tab-inactive');
-    emailInput.placeholder = 'staff@animates.ph';
+    emailInput.placeholder = 'staff@animates.ph or cashier@animates.ph';
+    const badge = document.getElementById('roleBadge');
+    if (badge) badge.textContent = 'Staff or Cashier';
   }
   errorEl.classList.add('hidden');
   errorEl.textContent = '';
@@ -30,7 +34,7 @@ function setRole(role) {
 
 tabAdmin.addEventListener('click', () => setRole('admin'));
 tabStaff.addEventListener('click', () => setRole('staff'));
-setRole('admin');
+setRole('staff');
 
 togglePasswordBtn.addEventListener('click', () => {
   const isPwd = passwordInput.type === 'password';
@@ -77,9 +81,22 @@ form.addEventListener('submit', async (e) => {
   try {
     const result = await signin(email, password);
     const actualRole = (result && result.user && result.user.role) ? result.user.role : '';
+    console.log('Signed-in role:', actualRole);
     
     if (!actualRole) throw new Error('Unable to determine user role');
     
+    // Immediate redirect for cashier regardless of selected tab
+    if (actualRole === 'cashier') {
+      if (result.token) {
+        localStorage.setItem('auth_token', result.token);
+        localStorage.setItem('auth_role', actualRole);
+        localStorage.setItem('auth_email', result.user.email);
+        if (result.user_id) localStorage.setItem('auth_user_id', result.user_id);
+      }
+      window.location.href = 'billing_management.html';
+      return;
+    }
+
     // Allow cashier to login with either admin or staff tab
     // Only restrict admin tab to admin users
     if (expectedRole === 'admin' && actualRole !== 'admin') {
@@ -105,13 +122,9 @@ form.addEventListener('submit', async (e) => {
     }
     if (actualRole === 'admin') {
       window.location.href = 'admin_accounts.html';
-    } else if (['staff', 'cashier'].includes(actualRole)) {
+    } else if (['staff'].includes(actualRole)) {
       // Redirect based on role
-      if (actualRole === 'cashier') {
-        window.location.href = 'billing_management.html';
-      } else {
-        window.location.href = 'staff_dashboard.html';
-      }
+      window.location.href = 'staff_dashboard.html';
     } else {
       throw new Error('Unsupported role');
     }
