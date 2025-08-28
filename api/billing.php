@@ -789,6 +789,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             st.payment_platform,
             st.status,
             st.created_at,
+            COALESCE(val.created_at, st.created_at) AS voided_at,
+            COALESCE(val.void_reason, 'No reason provided') AS void_reason,
             b.id AS booking_id,
             b.custom_rfid AS rfid_tag,
             c.name AS customer_name,
@@ -798,6 +800,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
         JOIN bookings b ON st.booking_id = b.id
         JOIN pets p ON b.pet_id = p.id
         JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN void_audit_log val ON st.id = val.transaction_id
         WHERE st.status = 'voided'
         ORDER BY st.created_at DESC
         LIMIT 100");

@@ -78,12 +78,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     document.getElementById('pendingBillsCard')?.addEventListener('click', () => {
         showSection('pending-bills');
     });
-    document.getElementById('processingBillsCard')?.addEventListener('click', () => {
-        showSection('pending-bills');
-        setTimeout(() => {
-            const el = document.getElementById('pendingBillsStatusFilter');
-            if (el) { el.value = 'in_progress'; el.dispatchEvent(new Event('change')); }
-        }, 100);
+    document.getElementById('voidsCard')?.addEventListener('click', () => {
+        showSection('voided-transactions');
     });
     document.getElementById('todayRevenueCard')?.addEventListener('click', () => {
         showSection('recent-transactions');
@@ -175,13 +171,15 @@ async function loadStats() {
             txRes.json()
         ]);
 
-        // Pending/processing counts
+        // Pending/voided counts
         const bills = Array.isArray(pendingData?.pending_bills) ? pendingData.pending_bills : [];
         const pendingCount = bills.filter(b => (b.payment_status || 'pending') !== 'paid').length;
-        const inProgressCount = bills.filter(b => b.status === 'in_progress').length;
-
+        
         // Revenue: sum completed transactions amounts for today and last 7 days
         const txs = Array.isArray(txData?.transactions) ? txData.transactions : [];
+        
+        // Count voided transactions
+        const voidedCount = txs.filter(t => (t.status || '').toLowerCase() === 'voided').length;
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -204,10 +202,16 @@ async function loadStats() {
         const todayRevenue = sum(todayAmounts);
         const weekRevenue = sum(weekAmounts);
 
-        document.getElementById('todayRevenue').textContent = '₱' + todayRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
-        document.getElementById('weekRevenue').textContent = '₱' + weekRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
-        document.getElementById('pendingBills').textContent = pendingCount;
-        document.getElementById('processingBills').textContent = inProgressCount;
+        // Update stats with error handling
+        const todayRevenueEl = document.getElementById('todayRevenue');
+        const weekRevenueEl = document.getElementById('weekRevenue');
+        const pendingBillsEl = document.getElementById('pendingBills');
+        const voidCountEl = document.getElementById('voidCount');
+        
+        if (todayRevenueEl) todayRevenueEl.textContent = '₱' + todayRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (weekRevenueEl) weekRevenueEl.textContent = '₱' + weekRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (pendingBillsEl) pendingBillsEl.textContent = pendingCount;
+        if (voidCountEl) voidCountEl.textContent = voidedCount;
     } catch (error) {
         console.error('Error loading stats:', error);
     }
@@ -567,6 +571,9 @@ function showSection(sectionName) {
         } else if (sectionName === 'pending-bills') {
             loadPendingBills();
             startPendingBillsAutoRefresh();
+        } else if (sectionName === 'voided-transactions') {
+            loadVoidedTransactions();
+            stopPendingBillsAutoRefresh();
         } else {
             // Stop auto-refresh for other sections
             stopPendingBillsAutoRefresh();
@@ -2089,7 +2096,14 @@ async function handleVoidSubmission(event) {
         if (data.success) {
             showNotification('Transaction voided successfully', 'success');
             closeVoidModal();
-            loadTransactions(); // Refresh the list
+            
+            // Refresh the transactions list and stats
+            await loadTransactions();
+            await loadStats();
+            
+            // Switch to voided transactions section to show the newly voided transaction
+            showSection('voided-transactions');
+            await loadVoidedTransactions();
         } else {
             const errorMessage = data.message || 'Unknown error occurred';
             showNotification('Failed to void transaction: ' + errorMessage, 'error');
@@ -2258,3 +2272,173 @@ function printReceiptFromModal() {
 }
 
 // Fit-to-container logic removed to mirror standalone receipt exactly
+
+// Load voided transactions
+async function loadVoidedTransactions() {
+    try {
+        const container = document.getElementById('voidedTransactionsTable');
+        if (!container) return;
+        
+        // Show loading state
+        container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Loading voided transactions...</td></tr>';
+        
+        const response = await fetch(`${API_BASE}billing.php?action=get_voided_transactions`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.transactions) {
+            if (data.transactions.length === 0) {
+                container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No voided transactions found</td></tr>';
+                return;
+            }
+            
+            const tbody = container;
+            tbody.innerHTML = '';
+            
+            data.transactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                
+                const voidedAt = new Date(transaction.voided_at);
+                const createdAt = new Date(transaction.created_at);
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div>${createdAt.toLocaleDateString()}</div>
+                        <div class="text-xs text-gray-500">${createdAt.toLocaleTimeString()}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">${transaction.customer_name || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div>${transaction.pet_name || 'N/A'}</div>
+                        <div class="text-xs text-gray-500">${transaction.pet_breed || ''}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 font-mono">${transaction.rfid_tag || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-right">₱${parseFloat(transaction.amount).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-center">
+                        <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                            ${transaction.payment_method || 'N/A'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title="${transaction.void_reason || 'No reason provided'}">
+                        ${transaction.void_reason || 'No reason provided'}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-center">
+                        <div class="flex flex-col items-center gap-2">
+                            <div>
+                                <div>${voidedAt.toLocaleDateString()}</div>
+                                <div class="text-xs text-gray-500">${voidedAt.toLocaleTimeString()}</div>
+                            </div>
+                            <button onclick="restoreTransaction(${transaction.id})" 
+                                    class="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors">
+                                Restore
+                            </button>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        } else {
+            container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Failed to load voided transactions</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading voided transactions:', error);
+        const container = document.getElementById('voidedTransactionsTable');
+        if (container) {
+            container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Error loading voided transactions</td></tr>';
+        }
+    }
+}
+
+// Export voided transactions
+async function exportVoidedTransactions() {
+    try {
+        const response = await fetch(`${API_BASE}billing.php?action=get_voided_transactions`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success || !data.transactions) {
+            throw new Error('No voided transactions data available');
+        }
+        
+        // Create CSV content
+        const headers = ['Date/Time', 'Customer', 'Pet', 'RFID', 'Amount', 'Payment Method', 'Reason', 'Voided At'];
+        const csvContent = [
+            headers.join(','),
+            ...data.transactions.map(t => [
+                new Date(t.created_at).toLocaleString(),
+                `"${t.customer_name || 'N/A'}"`,
+                `"${t.pet_name || 'N/A'}"`,
+                t.rfid_tag || 'N/A',
+                t.amount,
+                t.payment_method || 'N/A',
+                `"${t.void_reason || 'No reason provided'}"`,
+                new Date(t.voided_at).toLocaleString()
+            ].join(','))
+        ].join('\n');
+        
+        // Download CSV file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `voided_transactions_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Voided transactions exported successfully', 'success');
+    } catch (error) {
+        console.error('Error exporting voided transactions:', error);
+        showNotification('Failed to export voided transactions', 'error');
+    }
+}
+
+// Restore a voided transaction
+async function restoreTransaction(transactionId) {
+    if (!confirm('Are you sure you want to restore this transaction? This will change its status back to completed.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}billing.php?action=restore_transaction`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                transaction_id: transactionId
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Transaction restored successfully', 'success');
+            
+            // Refresh the voided transactions list and stats
+            await loadVoidedTransactions();
+            await loadStats();
+            
+            // Switch back to recent transactions to show the restored transaction
+            showSection('recent-transactions');
+            await loadTransactions();
+        } else {
+            showNotification(data.message || 'Failed to restore transaction', 'error');
+        }
+    } catch (error) {
+        console.error('Error restoring transaction:', error);
+        showNotification('Failed to restore transaction', 'error');
+    }
+}
