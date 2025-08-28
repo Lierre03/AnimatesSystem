@@ -266,6 +266,10 @@ function handleCheckin() {
         // Create initial status update
         createStatusUpdate($db, $bookingId, 'checked-in', 'Initial check-in completed');
         
+        // Update RFID card to mark it as currently booked
+        $stmt = $db->prepare("UPDATE rfid_cards SET is_currently_booked = 1 WHERE id = ?");
+        $stmt->execute([$rfidCard['id']]);
+        
         // Update booking with welcome email flag
         $stmt = $db->prepare("UPDATE bookings SET welcome_email_sent = 0 WHERE id = ?");
         $stmt->execute([$bookingId]);
@@ -505,7 +509,7 @@ function sendTrackingLinkEmail($bookingId, $customerEmail, $customRFID) {
         <html>
         <body style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
             <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;'>
-                <h1 style='color: white; margin: 0;'>8Paws Pet Boutique</h1>
+                <h1 style='color: white; margin: 0;'>Animates Pet Boutique</h1>
                 <p style='color: white; margin: 5px 0 0 0;'>Pet Grooming & Care Services</p>
             </div>
             <div style='padding: 30px; background: white;'>
@@ -524,7 +528,7 @@ function sendTrackingLinkEmail($bookingId, $customerEmail, $customRFID) {
         
         $headers = "MIME-Version: 1.0" . "\r\n";
         $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: 8Paws Pet Boutique <noreply@8pawspetboutique.com>" . "\r\n";
+        $headers .= "From: Animates Pet Boutique <noreply@animatespetboutique.com>" . "\r\n";
         
         // Suppress warnings and return result
         return @mail($customerEmail, $subject, $message, $headers);

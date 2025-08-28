@@ -57,13 +57,45 @@ document.addEventListener('DOMContentLoaded', async function() {
     await checkAuth();
     await loadStats();
     await loadPendingBills();
-    await loadPaymentProcessing();
+    // Only load the payment processing widget if its container exists on this page
+    if (document.getElementById('paymentProcessingContainer')) {
+        await loadPaymentProcessing();
+    }
     
     // Initialize with manual billing section
     showSection('manual-billing');
     
     // Set up payment method change handler
     document.getElementById('paymentMethod').addEventListener('change', handlePaymentMethodChange);
+    document.getElementById('logoutBtn')?.addEventListener('click', () => {
+        try {
+            localStorage.clear();
+        } catch (_) {}
+        window.location.replace('admin_staff_auth.html');
+    });
+
+    // Make stat cards clickable
+    document.getElementById('pendingBillsCard')?.addEventListener('click', () => {
+        showSection('pending-bills');
+    });
+    document.getElementById('voidsCard')?.addEventListener('click', () => {
+        showSection('voided-transactions');
+    });
+    document.getElementById('todayRevenueCard')?.addEventListener('click', () => {
+        showSection('recent-transactions');
+        // Optionally set date filter to today
+        setTimeout(() => {
+            const el = document.getElementById('dateFilter');
+            if (el) { el.value = 'today'; el.dispatchEvent(new Event('change')); }
+        }, 100);
+    });
+    document.getElementById('weekRevenueCard')?.addEventListener('click', () => {
+        showSection('recent-transactions');
+        setTimeout(() => {
+            const el = document.getElementById('dateFilter');
+            if (el) { el.value = 'week'; el.dispatchEvent(new Event('change')); }
+        }, 100);
+    });
 });
 
 // Authentication check
@@ -77,9 +109,11 @@ async function checkAuth() {
         return false;
     }
     
-    // Check if user has access to billing (admin or cashier)
-    if (role !== 'admin' && staffRole !== 'cashier') {
-        alert('Access denied. Only admin and cashier staff can access billing management.');
+    // Check if user has access to billing (admin or cashier). Support both top-level role and legacy staff_role.
+    const isAdmin = role === 'admin';
+    const isCashier = role === 'cashier' || staffRole === 'cashier';
+    if (!isAdmin && !isCashier) {
+        alert('Access denied. Only admin and cashier can access billing management.');
         redirectToAuth();
         return false;
     }
@@ -87,10 +121,21 @@ async function checkAuth() {
     // Set current user from localStorage
     currentUser = {
         id: localStorage.getItem('auth_user_id') || 'unknown',
-        email: localStorage.getItem('auth_email'),
+        email: localStorage.getItem('auth_email') || '',
+        username: localStorage.getItem('auth_username') || '',
+        full_name: localStorage.getItem('auth_full_name') || '',
         role: role,
         staff_role: staffRole
     };
+    
+    // If full_name is not available, try to get it from the username or email
+    if (!currentUser.full_name || currentUser.full_name.trim() === '') {
+        if (currentUser.username && currentUser.username.trim() !== '') {
+            currentUser.full_name = currentUser.username;
+        } else if (currentUser.email && currentUser.email.trim() !== '') {
+            currentUser.full_name = currentUser.email.split('@')[0];
+        }
+    }
     
     updateUserInfo();
     return true;
@@ -99,12 +144,20 @@ async function checkAuth() {
 // Update user information display
 function updateUserInfo() {
     if (currentUser) {
-        const userName = currentUser.email.split('@')[0];
-        const userInitial = userName.charAt(0).toUpperCase();
-        
-        document.getElementById('userName').textContent = userName;
-        document.getElementById('userRole').textContent = currentUser.staff_role === 'cashier' ? 'Cashier' : 'Admin';
-        document.getElementById('userInitials').textContent = userInitial;
+        const preferredName = (currentUser.full_name && currentUser.full_name.trim())
+            ? currentUser.full_name.trim()
+            : ((currentUser.username && currentUser.username.trim())
+                ? currentUser.username.trim()
+                : (currentUser.email ? currentUser.email.split('@')[0] : 'User'));
+        const userInitial = preferredName.charAt(0).toUpperCase();
+
+        const nameEl = document.getElementById('userName');
+        const roleEl = document.getElementById('userRole');
+        const initEl = document.getElementById('userInitials');
+        if (nameEl) nameEl.textContent = preferredName;
+        const roleLabel = currentUser.role === 'admin' ? 'Admin' : (currentUser.role === 'cashier' || currentUser.staff_role === 'cashier' ? 'Cashier' : 'Staff');
+        if (roleEl) roleEl.textContent = roleLabel;
+        if (initEl) initEl.textContent = userInitial;
     }
 }
 
@@ -117,11 +170,58 @@ function redirectToAuth() {
 // Load statistics
 async function loadStats() {
     try {
-        // In a real system, this would fetch from API
-        document.getElementById('todayRevenue').textContent = '₱8,450';
-        document.getElementById('pendingBills').textContent = '7';
-        document.getElementById('processingBills').textContent = '3';
-        document.getElementById('weekRevenue').textContent = '₱42,350';
+        // Fetch pending bills and transactions in parallel
+        const [pendingRes, txRes] = await Promise.all([
+            fetch(`${API_BASE}billing.php?action=get_pending_bills`),
+            fetch(`${API_BASE}billing.php?action=get_transactions`)
+        ]);
+        const [pendingData, txData] = await Promise.all([
+            pendingRes.json(),
+            txRes.json()
+        ]);
+
+        // Pending bills count - only count actual pending payments
+        const bills = Array.isArray(pendingData?.pending_bills) ? pendingData.pending_bills : [];
+        const pendingCount = bills.length; // All bills returned are pending
+        
+        // Revenue: sum completed transactions amounts for today and last 7 days
+        const txs = Array.isArray(txData?.transactions) ? txData.transactions : [];
+        
+        // Count voided transactions (including those with void_reason set)
+        const voidedCount = txs.filter(t => (t.status || '').toLowerCase() === 'voided' || t.void_reason).length;
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const sum = (arr) => arr.reduce((acc, n) => acc + (parseFloat(n) || 0), 0);
+
+        // Calculate revenue from completed transactions (excluding voided ones)
+        const completedTxs = txs.filter(t => (t.status || '').toLowerCase() === 'completed' && !t.void_reason);
+        const todayAmounts = completedTxs
+            .filter(t => {
+                const d = new Date(t.created_at);
+                return d >= startOfToday;
+            })
+            .map(t => parseFloat(t.amount) || 0);
+        const weekAmounts = completedTxs
+            .filter(t => {
+                const d = new Date(t.created_at);
+                return d >= sevenDaysAgo;
+            })
+            .map(t => parseFloat(t.amount) || 0);
+
+        const todayRevenue = sum(todayAmounts);
+        const weekRevenue = sum(weekAmounts);
+
+        // Update stats with error handling
+        const todayRevenueEl = document.getElementById('todayRevenue');
+        const weekRevenueEl = document.getElementById('weekRevenue');
+        const pendingBillsEl = document.getElementById('pendingBills');
+        const voidCountEl = document.getElementById('voidCount');
+        
+        if (todayRevenueEl) todayRevenueEl.textContent = '₱' + todayRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (weekRevenueEl) weekRevenueEl.textContent = '₱' + weekRevenue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (pendingBillsEl) pendingBillsEl.textContent = pendingCount;
+        if (voidCountEl) voidCountEl.textContent = voidedCount;
     } catch (error) {
         console.error('Error loading stats:', error);
     }
@@ -144,14 +244,14 @@ async function loadPendingBills() {
         const data = await response.json();
         
         if (data.success) {
-                    if (data.pending_bills && Array.isArray(data.pending_bills)) {
+            if (data.pending_bills && Array.isArray(data.pending_bills)) {
             if (data.pending_bills.length === 0) {
                 container.innerHTML = '<div class="text-center py-8 text-gray-500">No pending bills found</div>';
                 return;
             }
             
             // Calculate summary statistics
-            const totalAmount = data.pending_bills.reduce((sum, bill) => sum + parseFloat(bill.total_amount), 0);
+            const totalAmount = data.pending_bills.reduce((sum, bill) => sum + parseFloat(bill.total_amount || 0), 0);
             const statusCounts = data.pending_bills.reduce((counts, bill) => {
                 counts[bill.status] = (counts[bill.status] || 0) + 1;
                 return counts;
@@ -163,22 +263,22 @@ async function loadPendingBills() {
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-lg font-semibold text-gray-900">Pending Bills Summary</h3>
                         <span class="text-sm text-gray-500">Total: ${data.pending_bills.length} bills</span>
-                        </div>
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                         <div class="text-center">
                             <div class="text-2xl font-bold text-blue-600">₱${totalAmount.toFixed(2)}</div>
                             <div class="text-sm text-gray-500">Total Value</div>
-                            </div>
+                        </div>
                         <div class="text-center">
                             <div class="text-2xl font-bold text-green-600">${statusCounts.completed || 0}</div>
                             <div class="text-sm text-gray-500">Completed</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-2xl font-bold text-yellow-600">${statusCounts.in_progress || 0}</div>
+                            <div class="text-2xl font-bold text-yellow-600">${statusCounts.grooming || 0}</div>
                             <div class="text-sm text-gray-500">In Progress</div>
-                    </div>
+                        </div>
                         <div class="text-center">
-                            <div class="text-2xl font-bold text-blue-600">${statusCounts.checked_in || 0}</div>
+                            <div class="text-2xl font-bold text-blue-600">${statusCounts['checked-in'] || 0}</div>
                             <div class="text-sm text-gray-500">Checked In</div>
                         </div>
                     </div>
@@ -197,8 +297,8 @@ async function loadPendingBills() {
                                         <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                                         </svg>
-                </div>
-            </div>
+                                    </div>
+                                </div>
                             </div>
                             
                             <!-- Status Filter -->
@@ -206,9 +306,9 @@ async function loadPendingBills() {
                                 <select id="pendingBillsStatusFilter" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gold-500 focus:border-transparent text-sm">
                                     <option value="">All Statuses</option>
                                     <option value="completed">Completed</option>
-                                    <option value="in_progress">In Progress</option>
-                                    <option value="checked_in">Checked In</option>
-                                    <option value="ready_for_pickup">Ready for Pickup</option>
+                                    <option value="grooming">In Progress</option>
+                                    <option value="checked-in">Checked In</option>
+                                    <option value="ready">Ready for Pickup</option>
                                 </select>
                             </div>
                             
@@ -481,6 +581,9 @@ function showSection(sectionName) {
         } else if (sectionName === 'pending-bills') {
             loadPendingBills();
             startPendingBillsAutoRefresh();
+        } else if (sectionName === 'voided-transactions') {
+            loadVoidedTransactions();
+            stopPendingBillsAutoRefresh();
         } else {
             // Stop auto-refresh for other sections
             stopPendingBillsAutoRefresh();
@@ -1770,10 +1873,17 @@ async function loadTransactions() {
         
         if (data.success) {
             if (data.transactions && Array.isArray(data.transactions)) {
-                currentTransactions = data.transactions;
+                // Deduplicate by booking_id (fallback to rfid_tag)
+                const seenKeys = new Set();
+                currentTransactions = data.transactions.filter(t => {
+                    const key = t.booking_id ?? t.rfid_tag;
+                    if (seenKeys.has(key)) return false;
+                    seenKeys.add(key);
+                    return true;
+                });
                 displayTransactions();
                 
-                if (data.transactions.length === 0) {
+                if (currentTransactions.length === 0) {
                     showNotification('No transactions found', 'info');
                 }
             } else {
@@ -1838,7 +1948,8 @@ function displayTransactions() {
     // Populate table
     pageTransactions.forEach(transaction => {
         const row = document.createElement('tr');
-        row.className = 'hover:bg-gray-50';
+        row.className = 'hover:bg-gray-50 cursor-pointer';
+        row.onclick = () => openReceiptModal(transaction.booking_id);
         
         const statusClass = getStatusClass(transaction.status);
         const statusText = getStatusText(transaction.status);
@@ -1869,10 +1980,8 @@ function displayTransactions() {
             </td>
             <td class="px-4 py-3 text-center">
                 ${transaction.status === 'completed' ? 
-                    `<button onclick="voidTransaction(${transaction.id})" 
-                             class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">
-                        Void
-                    </button>` : 
+                    `<button onclick="event.stopPropagation(); voidTransaction(${transaction.id})" 
+                             class="px-2 py-1 text-xs bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">Void</button>` : 
                     '<span class="text-gray-400 text-xs">-</span>'
                 }
             </td>
@@ -1997,7 +2106,14 @@ async function handleVoidSubmission(event) {
         if (data.success) {
             showNotification('Transaction voided successfully', 'success');
             closeVoidModal();
-            loadTransactions(); // Refresh the list
+            
+            // Refresh the transactions list and stats
+            await loadTransactions();
+            await loadStats();
+            
+            // Switch to voided transactions section to show the newly voided transaction
+            showSection('voided-transactions');
+            await loadVoidedTransactions();
         } else {
             const errorMessage = data.message || 'Unknown error occurred';
             showNotification('Failed to void transaction: ' + errorMessage, 'error');
@@ -2058,6 +2174,24 @@ function exportTransactions() {
     }
 }
 
+// Export transactions to Excel (auto-fit columns)
+function exportTransactionsExcel() {
+    try {
+        showNotification('Preparing Excel export...', 'info');
+        const exportUrl = `${API_BASE}billing.php?action=export_transactions_excel`;
+        const link = document.createElement('a');
+        link.href = exportUrl;
+        link.download = `transactions_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('Excel export started', 'success');
+    } catch (error) {
+        console.error('Error exporting transactions (Excel):', error);
+        showNotification('Failed to export transactions (Excel)', 'error');
+    }
+}
+
 // Event listeners for transaction management
 document.addEventListener('DOMContentLoaded', function() {
     // Add event listeners for search and filters
@@ -2079,3 +2213,242 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add void form submission handler
     document.getElementById('voidForm')?.addEventListener('submit', handleVoidSubmission);
 });
+
+function openReceiptModal(bookingId) {
+    if (!bookingId) return;
+    const modal = document.getElementById('receiptModal');
+    const frame = document.getElementById('receiptFrame');
+    frame.dataset.bookingId = bookingId;
+    // Show receipt exactly as standalone page would render (no scaling)
+    frame.dataset.scale = '1';
+    frame.style.transform = 'none';
+    frame.style.width = '100%';
+    frame.style.height = '100%';
+    frame.onload = () => {
+        try {
+            const doc = frame.contentDocument || frame.contentWindow.document;
+            // Allow the iframe to scroll exactly like a standalone page
+            doc.body.style.overflow = 'auto';
+            doc.documentElement.style.overflow = 'auto';
+            // Hide thank-you section and print button when embedded in modal
+            try {
+                const thankYou = doc.querySelector('.thank-you');
+                if (thankYou) thankYou.style.display = 'none';
+                const printBtnSection = doc.querySelector('.no-print');
+                if (printBtnSection) printBtnSection.style.display = 'none';
+            } catch (_) {}
+        } catch (e) {
+            // Cross-origin safety: ignore
+        }
+    };
+    // Load printable page in embed mode to hide modal-only footer/print
+    frame.src = `${API_BASE}billing.php?action=print_receipt&booking_id=${encodeURIComponent(bookingId)}&embed=1`;
+    modal.classList.remove('hidden');
+}
+
+function closeReceiptModal() {
+    const modal = document.getElementById('receiptModal');
+    const frame = document.getElementById('receiptFrame');
+    frame.src = 'about:blank';
+    modal.classList.add('hidden');
+}
+
+// zoomReceipt removed per request (fixed real-size view)
+
+function openReceiptNewTab() {
+    // Deprecated: opening in new tab removed; modal shows same printable layout embedded
+}
+
+function printReceiptFromModal() {
+    const frame = document.getElementById('receiptFrame');
+    try {
+        if (frame && frame.contentWindow) {
+            frame.contentWindow.focus();
+            frame.contentWindow.print();
+        } else {
+            throw new Error('No frame contentWindow');
+        }
+    } catch (e) {
+        console.warn('Unable to print from iframe:', e);
+        // Fallback: open standalone receipt without embed flag
+        try {
+            const src = frame ? frame.getAttribute('src') : '';
+            if (src && src !== 'about:blank') {
+                const standalone = src.replace(/([&?])embed=1(&|$)/, '$1').replace(/[&?]$/, '');
+                window.open(standalone, '_blank');
+            }
+        } catch (_) {}
+    }
+}
+
+// Fit-to-container logic removed to mirror standalone receipt exactly
+
+// Load voided transactions
+async function loadVoidedTransactions() {
+    try {
+        const container = document.getElementById('voidedTransactionsTable');
+        if (!container) return;
+        
+        // Show loading state
+        container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Loading voided transactions...</td></tr>';
+        
+        const response = await fetch(`${API_BASE}billing.php?action=get_voided_transactions`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success && data.transactions) {
+            if (data.transactions.length === 0) {
+                container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">No voided transactions found</td></tr>';
+                return;
+            }
+            
+            const tbody = container;
+            tbody.innerHTML = '';
+            
+            data.transactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                
+                const voidedAt = new Date(transaction.voided_at);
+                const createdAt = new Date(transaction.created_at);
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div>${createdAt.toLocaleDateString()}</div>
+                        <div class="text-xs text-gray-500">${createdAt.toLocaleTimeString()}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">${transaction.customer_name || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900">
+                        <div>${transaction.pet_name || 'N/A'}</div>
+                        <div class="text-xs text-gray-500">${transaction.pet_breed || ''}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 font-mono">${transaction.rfid_tag || 'N/A'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-right">₱${parseFloat(transaction.amount).toFixed(2)}</td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-center">
+                        <span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                            ${transaction.payment_method || 'N/A'}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title="${transaction.void_reason || 'No reason provided'}">
+                        ${transaction.void_reason || 'No reason provided'}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-center">
+                        <div class="flex flex-col items-center gap-2">
+                            <div>
+                                <div>${voidedAt.toLocaleDateString()}</div>
+                                <div class="text-xs text-gray-500">${voidedAt.toLocaleTimeString()}</div>
+                            </div>
+                            <button onclick="restoreTransaction(${transaction.id})" 
+                                    class="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors">
+                                Restore
+                            </button>
+                        </div>
+                    </td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        } else {
+            container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Failed to load voided transactions</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading voided transactions:', error);
+        const container = document.getElementById('voidedTransactionsTable');
+        if (container) {
+            container.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Error loading voided transactions</td></tr>';
+        }
+    }
+}
+
+// Export voided transactions
+async function exportVoidedTransactions() {
+    try {
+        const response = await fetch(`${API_BASE}billing.php?action=get_voided_transactions`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success || !data.transactions) {
+            throw new Error('No voided transactions data available');
+        }
+        
+        // Create CSV content
+        const headers = ['Date/Time', 'Customer', 'Pet', 'RFID', 'Amount', 'Payment Method', 'Reason', 'Voided At'];
+        const csvContent = [
+            headers.join(','),
+            ...data.transactions.map(t => [
+                new Date(t.created_at).toLocaleString(),
+                `"${t.customer_name || 'N/A'}"`,
+                `"${t.pet_name || 'N/A'}"`,
+                t.rfid_tag || 'N/A',
+                t.amount,
+                t.payment_method || 'N/A',
+                `"${t.void_reason || 'No reason provided'}"`,
+                new Date(t.voided_at).toLocaleString()
+            ].join(','))
+        ].join('\n');
+        
+        // Download CSV file
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `voided_transactions_${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification('Voided transactions exported successfully', 'success');
+    } catch (error) {
+        console.error('Error exporting voided transactions:', error);
+        showNotification('Failed to export voided transactions', 'error');
+    }
+}
+
+// Restore a voided transaction
+async function restoreTransaction(transactionId) {
+    if (!confirm('Are you sure you want to restore this transaction? This will change its status back to completed.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}billing.php?action=restore_transaction`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                transaction_id: transactionId
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showNotification('Transaction restored successfully', 'success');
+            
+            // Refresh the voided transactions list and stats
+            await loadVoidedTransactions();
+            await loadStats();
+            
+            // Switch back to recent transactions to show the restored transaction
+            showSection('recent-transactions');
+            await loadTransactions();
+        } else {
+            showNotification(data.message || 'Failed to restore transaction', 'error');
+        }
+    } catch (error) {
+        console.error('Error restoring transaction:', error);
+        showNotification('Failed to restore transaction', 'error');
+    }
+}

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RFID Tap Test - 8Paws</title>
+    <title>RFID Tap Test - Animates</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -90,7 +90,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🐾 8Paws RFID Tap Test</h1>
+            <h1>🐾 Animates RFID Tap Test</h1>
             <p>Test your RFID tap functionality and see the JSON response</p>
         </div>
 
@@ -129,7 +129,7 @@
             // Update input field
             document.getElementById('rfidTag').value = rfidTag;
 
-            fetch('/8paws/api/rfid_tap.php', {
+            fetch('/animates/api/rfid_tap.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

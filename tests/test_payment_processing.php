@@ -143,9 +143,9 @@ try {
             echo "<li>Discount: ₱{$newTransaction['discount_amount']}</li>";
             echo "<li>Status: {$newTransaction['status']}</li>";
             echo "</ul>";
-        }
-        
-    } catch (Exception $e) {
+    }
+    
+} catch (Exception $e) {
         echo "<p style='color: red;'>✗ Error creating test transaction: " . $e->getMessage() . "</p>";
     }
     

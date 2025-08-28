@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>8Paws Compact Receipt Tester</title>
+    <title>Animates Compact Receipt Tester</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         body {
@@ -68,7 +68,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🧾 8Paws COMPACT Receipt Tester</h1>
+        <h1>🧾 Animates COMPACT Receipt Tester</h1>
         
         <div class="format-info">
             📏 <strong>NEW FORMAT:</strong> Adaptive receipt size (80mm width) - like thermal receipt printers!
@@ -231,7 +231,7 @@
    doc.setTextColor(255, 255, 255);
    doc.setFontSize(10);
    doc.setFont('helvetica', 'bold');
-   doc.text('8PAWS PET', 40, 6, { align: 'center' });
+   doc.text('ANIMATES PET', 40, 6, { align: 'center' });
    doc.text('BOUTIQUE & GROOMING SALON', 40, 10, { align: 'center' });
    
    doc.setFontSize(7);
@@ -377,14 +377,14 @@
    doc.setTextColor(0, 0, 0);
    doc.setFontSize(7);
    doc.setFont('helvetica', 'bold');
-   doc.text('Thank you for choosing 8Paws!', 40, yPos, { align: 'center' });
+   doc.text('Thank you for choosing Animates!', 40, yPos, { align: 'center' });
    yPos += 3;
    doc.setFont('helvetica', 'normal');
    doc.text('Your pet is in good hands', 40, yPos, { align: 'center' });
    
    // Save PDF
    const cleanPetName = (petData.petName || 'Pet').replace(/[^a-zA-Z0-9]/g, '');
-   const fileName = `8Paws_CompactReceipt_${cleanPetName}_${currentDate.toISOString().slice(0, 10)}.pdf`;
+   const fileName = `Animates_CompactReceipt_${cleanPetName}_${currentDate.toISOString().slice(0, 10)}.pdf`;
    doc.save(fileName);
 }
     </script>

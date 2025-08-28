@@ -11,7 +11,7 @@ ini_set('display_errors', 1);
 require_once __DIR__ . '/../config/database.php';
 
 echo "<h2>Running Migration: Remove 'pending' from Payment Status</h2>";
-echo "<p>This will update your existing 8paws_db database to remove the 'pending' payment status.</p>";
+        echo "<p>This will update your existing animates_db database to remove the 'pending' payment status.</p>";
 
 try {
     $db = getDB();

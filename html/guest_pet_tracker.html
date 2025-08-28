@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>8Paws Pet Boutique & Grooming Salon - Track Your Pet</title>
+    <title>Animates Pet Boutique & Grooming Salon - Track Your Pet</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     
@@ -13,8 +13,10 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#667eea',
-                        secondary: '#764ba2',
+                        primary: '#f59e0b',
+                        secondary: '#d97706',
+                        accent: '#fbbf24',
+                        warm: '#fef3c7'
                     }
                 }
             }
@@ -36,8 +38,8 @@
         }
 
         @keyframes pulse-bg {
-            0%, 100% { background-color: rgba(102, 126, 234, 0.1); }
-            50% { background-color: rgba(102, 126, 234, 0.2); }
+            0%, 100% { background-color: rgba(245, 158, 11, 0.1); }
+            50% { background-color: rgba(245, 158, 11, 0.2); }
         }
 
         .notification-processing {
@@ -79,13 +81,13 @@
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+<body class="bg-gradient-to-br from-yellow-50 to-amber-100 min-h-screen">
     <!-- Header -->
-    <header class="bg-white shadow-sm border-b">
+    <header class="bg-white shadow-sm border-b border-yellow-200">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-4">
                 <div class="flex items-center space-x-3">
-                    <img src="/8paws/8PAWS_LOGO.png" alt="8Paws Logo" class="h-16 w-16 object-contain">
+                    <img src="../animates_logo.png" alt="Animates Logo" class="h-10 w-10 object-contain">
                     <div>
                         <p class="text-sm text-primary font-medium">Pet Progress Tracker</p>
                         <p class="text-xs text-gray-500">Track your pet's grooming journey</p>
@@ -102,11 +104,11 @@
     <!-- Main Content -->
     <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <!-- Main Tracking Section -->
-        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-8">
+        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-8 border-2 border-yellow-200">
             <div class="px-6 py-8 sm:px-10">
                 <div class="text-center mb-8">
-                    <div class="inline-flex items-center justify-center w-24 h-24 bg-grey-200  border-2 border-primary/20  rounded-full mb-6 shadow-lg">
-                        <i class="fas fa-search text-blue-700 text-4xl"></i>
+                    <div class="inline-flex items-center justify-center w-24 h-24 bg-yellow-100 border-2 border-primary/30 rounded-full mb-6 shadow-lg">
+                        <i class="fas fa-search text-primary text-4xl"></i>
                     </div>
                     <h1 class="text-3xl font-bold text-gray-900 mb-3">Track Your Pet's Grooming Progress</h1>
                     <p class="text-xl text-gray-600 max-w-2xl mx-auto">Enter your tracking ID to see real-time updates and monitor your pet's journey through our grooming process</p>
@@ -115,31 +117,31 @@
                 <!-- Tracking Form -->
                 <div class="max-w-2xl mx-auto mb-7">
                     <form id="trackingForm" class="space-y-6">
-                        <div class="bg-grey-200 border-2 border-primary/20 rounded-xl p-8 shadow-lg">
+                        <div class="bg-yellow-50 border-2 border-primary/30 rounded-xl p-8 shadow-lg">
                             <div class="text-center mb-6">
-                                <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-4 shadow-md border-2 border-primary/20">
-                                    <i class="fas fa-tag text-blue-700 text-2xl"></i>
+                                <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-4 shadow-md border-2 border-primary/30">
+                                    <i class="fas fa-tag text-primary text-2xl"></i>
                                 </div>
                                 <h3 class="text-xl font-bold text-gray-900 mb-2">Enter Your Tracking Information</h3>
                             </div>
                             
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-3">
-                                    <i class="fas fa-tag text-blue-700 mr-2"></i>
+                                    <i class="fas fa-tag text-primary mr-2"></i>
                                     Tracking ID / Custom UID *
                                 </label>
                                 <input type="text" id="trackingToken" required 
-                                       class="w-full px-6 py-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 text-center text-xl  tracking-wider bg-white shadow-md"
+                                       class="w-full px-6 py-4 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all duration-200 text-center text-xl tracking-wider bg-white shadow-md"
                                        placeholder="Enter your tracking ID (e.g., 3ZJZPV7R)"
                                        style="letter-spacing: 0.15em;">
                                 <div class="flex items-center mt-3 text-sm text-gray-500">
-                                    <i class="fas fa-info-circle mr-2 text-blue-700"></i>
+                                    <i class="fas fa-info-circle mr-2 text-primary"></i>
                                     <p>This ID was provided during check-in and sent to your email</p>
                                 </div>
                             </div>
 
                             <button type="submit" id="trackButton" 
-                                    class="w-full bg-primary hover:bg-blue-700  text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center justify-center mt-6">
+                                    class="w-full bg-primary hover:bg-secondary text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center justify-center mt-6">
                                 <i class="fas fa-search mr-3 text-xl"></i>
                                 Track My Pet's Progress
                             </button>
@@ -152,10 +154,10 @@
         <!-- Information Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <!-- Real-time Updates Card -->
-            <div class="bg-white border-2 border-grey-200 rounded-xl p-6 shadow-lg">
+            <div class="bg-white border-2 border-yellow-200 rounded-xl p-6 shadow-lg">
                 <div class="text-center">
-                    <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full mb-4 shadow-md">
-                        <i class="fas fa-clock text-blue-600 text-2xl"></i>
+                    <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-yellow-100 to-amber-100 rounded-full mb-4 shadow-md">
+                        <i class="fas fa-clock text-primary text-2xl"></i>
                     </div>
                     <h3 class="text-lg font-semibold text-gray-900 mb-3">Real-time Updates</h3>
                     <p class="text-gray-600">Get live updates as your pet progresses through each stage of our professional grooming process</p>
@@ -163,7 +165,7 @@
             </div>
 
             <!-- Instant Notifications Card -->
-            <div class="bg-white border-2 border-grey-200 rounded-xl p-6 shadow-lg">
+            <div class="bg-white border-2 border-yellow-200 rounded-xl p-6 shadow-lg">
                 <div class="text-center">
                     <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full mb-4 shadow-md">
                         <i class="fas fa-bell text-green-600 text-2xl"></i>
@@ -175,7 +177,7 @@
         </div>
 
         <!-- Grooming Process Timeline -->
-        <div class="bg-white border-2 border-gray-200 rounded-xl p-8 mb-8 shadow-lg">
+        <div class="bg-white border-2 border-yellow-200 rounded-xl p-8 mb-8 shadow-lg">
             <div class="text-center mb-8">
                 <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full mb-4 shadow-md">
                     <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -189,34 +191,34 @@
             <!-- Process Steps -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div class="text-center">
-                    <div class="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-blue-300">
-                        <i class="fas fa-clipboard-check text-blue-600 text-xl"></i>
+                    <div class="w-16 h-16 bg-gradient-to-br from-yellow-100 to-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-primary/30">
+                        <i class="fas fa-clipboard-check text-primary text-xl"></i>
                     </div>
                     <h4 class="font-semibold text-gray-900 mb-2">Check-in</h4>
                     <p class="text-sm text-gray-600">Registration & health assessment</p>
-                    <div class="mt-3 inline-block px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                    <div class="mt-3 inline-block px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">
                         Step 1
                     </div>
                 </div>
 
                 <div class="text-center">
-                    <div class="w-16 h-16 bg-gradient-to-br from-indigo-100 to-indigo-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-indigo-300">
-                        <i class="fas fa-bath text-indigo-600 text-xl"></i>
+                    <div class="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-orange-300">
+                        <i class="fas fa-bath text-orange-600 text-xl"></i>
                     </div>
                     <h4 class="font-semibold text-gray-900 mb-2">Bathing</h4>
                     <p class="text-sm text-gray-600">Premium washing & conditioning</p>
-                    <div class="mt-3 inline-block px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
+                    <div class="mt-3 inline-block px-3 py-1 bg-orange-100 text-orange-800 text-xs font-medium rounded-full">
                         Step 2
                     </div>
                 </div>
 
                 <div class="text-center">
-                    <div class="w-16 h-16 bg-gradient-to-br from-purple-100 to-purple-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-purple-300">
-                        <i class="fas fa-scissors text-purple-600 text-xl"></i>
+                    <div class="w-16 h-16 bg-gradient-to-br from-amber-100 to-yellow-200 rounded-full flex items-center justify-center mx-auto mb-4 shadow-md border-2 border-amber-300">
+                        <i class="fas fa-scissors text-amber-600 text-xl"></i>
                     </div>
                     <h4 class="font-semibold text-gray-900 mb-2">Grooming</h4>
                     <p class="text-sm text-gray-600">Professional cutting & styling</p>
-                    <div class="mt-3 inline-block px-3 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded-full">
+                    <div class="mt-3 inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
                         Step 3
                     </div>
                 </div>
@@ -234,7 +236,7 @@
             </div>
 
             <!-- Process Flow Indicator -->
-            <div class="mt-8 pt-6 border-t border-gray-200">
+            <div class="mt-8 pt-6 border-t border-yellow-200">
                 <div class="text-center">
                     <div class="flex items-center justify-center">
                         <svg class="w-5 h-5 text-primary mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -249,44 +251,44 @@
         <!-- Additional Features -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <!-- Feature 1 -->
-            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 shadow-sm">
+            <div class="bg-gradient-to-r from-yellow-50 to-amber-50 border-2 border-yellow-200 rounded-xl p-6 shadow-sm">
                 <div class="text-center">
-                    <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-4 shadow-md">
-                        <i class="fas fa-mobile-alt text-blue-600 text-lg"></i>
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-full mb-4 shadow-md">
+                        <i class="fas fa-mobile-alt text-primary text-lg"></i>
                     </div>
-                    <h4 class="font-semibold text-blue-900 mb-2">Mobile Friendly</h4>
-                    <p class="text-blue-700 text-sm">Track from anywhere on any device</p>
+                    <h4 class="font-semibold text-yellow-900 mb-2">Mobile Friendly</h4>
+                    <p class="text-yellow-700 text-sm">Track from anywhere on any device</p>
                 </div>
             </div>
 
             <!-- Feature 2 -->
-            <div class="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-6 shadow-sm">
+            <div class="bg-gradient-to-r from-orange-50 to-orange-100 border-2 border-orange-200 rounded-xl p-6 shadow-sm">
                 <div class="text-center">
-                    <div class="inline-flex items-center justify-center w-12 h-12 bg-purple-100 rounded-full mb-4 shadow-md">
-                        <i class="fas fa-shield-alt text-purple-600 text-lg"></i>
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-orange-100 rounded-full mb-4 shadow-md">
+                        <i class="fas fa-shield-alt text-orange-600 text-lg"></i>
                     </div>
-                    <h4 class="font-semibold text-purple-900 mb-2">Secure Tracking</h4>
-                    <p class="text-purple-700 text-sm">Your pet's data is protected</p>
+                    <h4 class="font-semibold text-orange-900 mb-2">Secure Tracking</h4>
+                    <p class="text-orange-700 text-sm">Your pet's data is protected</p>
                 </div>
             </div>
 
             <!-- Feature 3 -->
-            <div class="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-6 shadow-sm">
+            <div class="bg-gradient-to-r from-amber-50 to-yellow-100 border-2 border-amber-200 rounded-xl p-6 shadow-sm">
                 <div class="text-center">
-                    <div class="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-4 shadow-md">
-                        <i class="fas fa-heart text-green-600 text-lg"></i>
+                    <div class="inline-flex items-center justify-center w-12 h-12 bg-amber-100 rounded-full mb-4 shadow-md">
+                        <i class="fas fa-heart text-amber-600 text-lg"></i>
                     </div>
-                    <h4 class="font-semibold text-green-900 mb-2">Peace of Mind</h4>
-                    <p class="text-green-700 text-sm">Know your pet is in good hands</p>
+                    <h4 class="font-semibold text-amber-900 mb-2">Peace of Mind</h4>
+                    <p class="text-amber-700 text-sm">Know your pet is in good hands</p>
                 </div>
             </div>
         </div>
 
         <!-- Help Section -->
-        <div class="bg-white border-2 border-gray-200 rounded-xl p-8 shadow-lg">
+        <div class="bg-white border-2 border-yellow-200 rounded-xl p-8 shadow-lg">
             <div class="text-center mb-6">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full mb-4 shadow-md">
-                    <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-yellow-100 to-amber-100 rounded-full mb-4 shadow-md">
+                    <svg class="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                     </svg>
                 </div>
@@ -302,7 +304,7 @@
                     </div>
                     <h4 class="font-semibold text-gray-900 mb-3">New Customer?</h4>
                     <p class="text-gray-600 text-sm mb-4">Create a new booking and get your tracking ID</p>
-                    <a href="check_in.html" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
+                    <a href="check_in.html" class="inline-flex items-center px-6 py-3 bg-primary hover:bg-secondary text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5">
                         <i class="fas fa-plus mr-2"></i>
                         Create New Booking
                     </a>
@@ -327,11 +329,11 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-white border-t mt-12">
+    <footer class="bg-white border-t border-yellow-200 mt-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="text-center text-sm text-gray-500">
-                <p>&copy; 2025 8Paws Pet Boutique & Grooming Salon. Professional Pet Care Services.</p>
-                <p class="mt-2">📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567 | 📧 info@8pawspetboutique.com</p>
+                <p>&copy; 2025 Animates Pet Boutique & Grooming Salon. Professional Pet Care Services.</p>
+                <p class="mt-2">📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567 | 📧 info@animatespetboutique.com</p>
             </div>
         </div>
     </footer>
@@ -434,7 +436,7 @@
                 success: 'bg-green-500',
                 error: 'bg-red-500',
                 warning: 'bg-yellow-500',
-                info: 'bg-blue-500'
+                info: 'bg-primary'
             };
             
             const icons = {

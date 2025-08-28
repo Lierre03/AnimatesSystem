@@ -18,10 +18,11 @@ function handleCreateUser($input) {
     try {
         requireAdmin();
         $db = getDB();
-        $required = ['first_name','last_name','email','phone','role'];
-        foreach ($required as $f) { if (empty(trim($input[$f] ?? ''))) throw new Exception(ucfirst($f).' is required'); }
+        // Validate inputs from admin form
+        $required = ['first_name','last_name','email','role'];
+        foreach ($required as $f) { if (empty(trim($input[$f] ?? ''))) throw new Exception(ucfirst(str_replace('_',' ', $f)).' is required'); }
         if (!filter_var($input['email'], FILTER_VALIDATE_EMAIL)) { throw new Exception('Invalid email'); }
-        if (!in_array($input['role'], ['admin','staff','customer'])) { throw new Exception('Invalid role'); }
+        if (!in_array($input['role'], ['admin','staff','customer','cashier'])) { throw new Exception('Invalid role'); }
         if ($input['role'] === 'staff') {
             $validStaff = ['cashier','receptionist','groomer','bather','manager'];
             if (!in_array(($input['staff_role'] ?? ''), $validStaff)) { throw new Exception('Invalid staff role'); }
@@ -32,18 +33,30 @@ function handleCreateUser($input) {
         $password = $input['password'] ?? bin2hex(random_bytes(4));
         if (strlen($password) < 8) { $password = $password . 'A1!a'; }
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = $db->prepare("INSERT INTO users (first_name,last_name,email,phone,address,role,staff_role,password_hash,email_verified,is_active) VALUES (?,?,?,?,?,?,?,?,1,1)");
+        $fullName = trim(($input['first_name'] ?? '').' '.($input['last_name'] ?? ''));
+        $username = $input['username'] ?? explode('@', $input['email'])[0];
+        // Determine role to persist; map staff+staff_role=cashier to top-level cashier
+        $incomingRole = $input['role'];
+        $incomingStaffRole = $input['staff_role'] ?? null;
+        $roleToSave = ($incomingRole === 'cashier')
+            ? 'cashier'
+            : (($incomingRole === 'staff' && $incomingStaffRole === 'cashier') ? 'cashier' : $incomingRole);
+
+        // Insert using current schema columns
+        $stmt = $db->prepare("INSERT INTO users (full_name,email,role,username,password,is_active) VALUES (?,?,?,?,?,1)");
         $stmt->execute([
-            $input['first_name'],
-            $input['last_name'],
+            $fullName,
             $input['email'],
-            $input['phone'],
-            $input['address'] ?? null,
-            $input['role'],
-            $input['role'] === 'staff' ? ($input['staff_role'] ?? null) : null,
+            // Persist resolved role
+            $roleToSave,
+            $username,
             $passwordHash
         ]);
-        echo json_encode(['success'=>true,'message'=>'User created','temporary_password'=>$input['password'] ? null : $password]);
+        $newUserId = $db->lastInsertId();
+        $check = $db->prepare("SELECT id, full_name, email, role, is_active, username FROM users WHERE id = ?");
+        $check->execute([$newUserId]);
+        $createdUser = $check->fetch(PDO::FETCH_ASSOC);
+        echo json_encode(['success'=>true,'message'=>'User created','temporary_password'=>$input['password'] ? null : $password,'user'=>$createdUser]);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -57,13 +70,22 @@ function handleListUsers($input) {
         requireAdmin();
         $db = getDB();
         $role = $input['filter_role'] ?? null;
-        if ($role) {
-            $stmt = $db->prepare("SELECT id,first_name,last_name,email,phone,role,staff_role,is_active,created_at FROM users WHERE role = ? ORDER BY created_at DESC");
+        $validRoles = ['admin','cashier','customer'];
+        if ($role && in_array($role, $validRoles, true)) {
+            $stmt = $db->prepare("SELECT id,full_name,email,role,is_active,username,created_at FROM users WHERE role = ? ORDER BY id DESC");
             $stmt->execute([$role]);
         } else {
-            $stmt = $db->query("SELECT id,first_name,last_name,email,phone,role,staff_role,is_active,created_at FROM users ORDER BY created_at DESC");
+            $stmt = $db->query("SELECT id,full_name,email,role,is_active,username,created_at FROM users ORDER BY id DESC");
         }
-        echo json_encode(['success'=>true,'users'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Debug logging
+        error_log("ListUsers API called - returning " . count($users) . " users");
+        foreach ($users as $user) {
+            error_log("User: ID=" . $user['id'] . ", full_name='" . ($user['full_name'] ?? 'NULL') . "', username='" . ($user['username'] ?? 'NULL') . "'");
+        }
+        
+        echo json_encode(['success'=>true,'users'=>$users]);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -79,20 +101,19 @@ function handleUpdateUserRole($input) {
         $userId = (int)($input['user_id'] ?? 0);
         if (!$userId) throw new Exception('user_id is required');
         $role = $input['role'] ?? null;
-        $staffRole = $input['staff_role'] ?? null;
-        if ($role && !in_array($role, ['admin','staff','customer'])) throw new Exception('Invalid role');
-        if ($role === 'staff') {
-            $validStaff = ['cashier','receptionist','groomer','bather','manager'];
-            if ($staffRole && !in_array($staffRole, $validStaff)) throw new Exception('Invalid staff role');
-        }
+        if ($role && !in_array($role, ['admin','staff','customer','cashier'])) throw new Exception('Invalid role');
         if ($role) {
-            $stmt = $db->prepare("UPDATE users SET role = ?, staff_role = ? WHERE id = ?");
-            $stmt->execute([$role, $role === 'staff' ? $staffRole : null, $userId]);
-        } else if ($staffRole) {
-            $stmt = $db->prepare("UPDATE users SET staff_role = ? WHERE id = ? AND role = 'staff'");
-            $stmt->execute([$staffRole, $userId]);
+            $stmt = $db->prepare("UPDATE users SET role = ? WHERE id = ?");
+            $stmt->execute([$role, $userId]);
+            $updated = $stmt->rowCount();
+            // Read-back to confirm
+            $check = $db->prepare("SELECT id, email, role FROM users WHERE id = ?");
+            $check->execute([$userId]);
+            $user = $check->fetch(PDO::FETCH_ASSOC);
+            echo json_encode(['success'=>true,'rows_affected'=>$updated,'user'=>$user]);
+            exit;
         }
-        echo json_encode(['success'=>true]);
+        echo json_encode(['success'=>false,'error'=>'No role provided']);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -108,9 +129,39 @@ function handleDeactivateUser($input) {
         $userId = (int)($input['user_id'] ?? 0);
         $active = isset($input['active']) ? (int)!!$input['active'] : 0;
         if (!$userId) throw new Exception('user_id is required');
+        // Determine current admin making the request
+        $token = getBearerToken();
+        $decoded = verifyJWT($token);
+
+        // Fetch target user's role and status
+        $check = $db->prepare("SELECT id, role, is_active FROM users WHERE id = ?");
+        $check->execute([$userId]);
+        $target = $check->fetch(PDO::FETCH_ASSOC);
+        if (!$target) { throw new Exception('User not found'); }
+
+        // Prevent deactivating yourself
+        if ($active === 0 && (int)$decoded->user_id === (int)$userId) {
+            throw new Exception('You cannot deactivate your own account');
+        }
+
+        // Prevent deactivating the last active admin
+        if ($active === 0 && $target['role'] === 'admin') {
+            $cnt = (int)$db->query("SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = 1")->fetchColumn();
+            if ($cnt <= 1) {
+                throw new Exception('Cannot deactivate the last active admin');
+            }
+        }
+
+        // Perform update
         $stmt = $db->prepare("UPDATE users SET is_active = ? WHERE id = ?");
         $stmt->execute([$active, $userId]);
-        echo json_encode(['success'=>true]);
+
+        // Return updated user
+        $refetch = $db->prepare("SELECT id, full_name, email, role, is_active, username FROM users WHERE id = ?");
+        $refetch->execute([$userId]);
+        $updated = $refetch->fetch(PDO::FETCH_ASSOC);
+
+        echo json_encode(['success'=>true, 'user'=>$updated]);
         exit;
     } catch (Exception $e) {
         http_response_code(400);
@@ -277,7 +328,7 @@ function handleLogin($input) {
         // Log the email being used (remove in production)
         error_log("Login attempt for email: " . $email);
         
-        $stmt = $db->prepare("SELECT id, password, is_active, username, full_name, role FROM users WHERE email = ?");
+        $stmt = $db->prepare("SELECT id, password, is_active, full_name, role FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -306,8 +357,7 @@ function handleLogin($input) {
     'user' => [
         'name' => $user['full_name'],
         'email' => $email,
-        'role' => $user['role'],
-        'username' => $user['username']
+        'role' => $user['role']
     ]
 ]);
         exit;
@@ -328,11 +378,10 @@ function handleSignup($input) {
         $db = getDB();
         
         // Validate required fields
-        $required = ['firstName', 'lastName', 'email', 'phone', 'address', 'emergencyContactName', 'emergencyContactNo', 'password'];
+        $required = ['firstName', 'lastName', 'email', 'password'];
         foreach ($required as $field) {
             if (!isset($input[$field]) || empty(trim($input[$field]))) {
-                $fieldName = str_replace(['emergencyContactName', 'emergencyContactNo'], ['Emergency Contact Name', 'Emergency Contact Number'], $field);
-                throw new Exception(ucfirst($fieldName) . ' is required');
+                throw new Exception(ucfirst($field) . ' is required');
             }
         }
         
@@ -353,11 +402,11 @@ function handleSignup($input) {
             throw new Exception('An account with this email already exists');
         }
         
-        // Check if phone already exists
-        $stmt = $db->prepare("SELECT id FROM users WHERE phone = ?");
-        $stmt->execute([$input['phone']]);
+        // Check if email already exists
+        $stmt = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$input['email']]);
         if ($stmt->fetch()) {
-            throw new Exception('An account with this phone number already exists');
+            throw new Exception('An account with this email already exists');
         }
         
         $db->beginTransaction();
@@ -368,22 +417,21 @@ function handleSignup($input) {
         $verificationToken = bin2hex(random_bytes(32));
         
         $stmt = $db->prepare("
-            INSERT INTO users (first_name, last_name, email, phone, address, emergency_contact_name, emergency_contact_no, password_hash, verification_code, verification_token) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO users (username, email, full_name, password, role, is_active, verification_code, verification_token, verification_code_expires, email_verified) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 30 MINUTE), 0)
         ");
 
+        $fullName = $input['firstName'] . ' ' . $input['lastName'];
+        $username = $input['email']; // Use email as username
         $stmt->execute([
-            $input['firstName'],
-            $input['lastName'],
+            $username,
             $input['email'],
-            $input['phone'],
-            $input['address'],
-            $input['emergencyContactName'],
-            $input['emergencyContactNo'],
+            $fullName,
             $passwordHash,
+            'customer', // Correct role for customer sign-ups
+            1, // Active by default
             $verificationCode,
-            $verificationToken,
-            // isset($input['marketingEmails']) ? ($input['marketingEmails'] ? 1 : 0) : 0
+            $verificationToken
         ]);
         
         $userId = $db->lastInsertId();
@@ -426,7 +474,7 @@ function handleEmailVerification($input) {
         }
         
         $stmt = $db->prepare("
-            SELECT id, email, verification_code, verification_code_expires, first_name, last_name, role 
+            SELECT id, email, verification_code, verification_code_expires, full_name, role 
             FROM users 
             WHERE verification_token = ? AND email_verified = 0
         ");
@@ -447,7 +495,7 @@ function handleEmailVerification($input) {
         
         $stmt = $db->prepare("
             UPDATE users 
-            SET email_verified = 1, email_verified_at = NOW(), verification_code = NULL, verification_token = NULL 
+            SET email_verified = 1, email_verified_at = NOW(), verification_code = NULL, verification_token = NULL, verification_code_expires = NULL 
             WHERE id = ?
         ");
         $stmt->execute([$user['id']]);
@@ -459,7 +507,7 @@ function handleEmailVerification($input) {
             'token' => $token,
             'user_id' => $user['id'],
             'user' => [
-                'name' => $user['first_name'] . ' ' . $user['last_name'],
+                'name' => $user['full_name'],
                 'email' => $user['email'],
                 'role' => $user['role']
             ],
@@ -486,7 +534,7 @@ function handleResendVerification($input) {
         }
         
         $stmt = $db->prepare("
-            SELECT id, email, first_name 
+            SELECT id, email, full_name 
             FROM users 
             WHERE verification_token = ? AND email_verified = 0
         ");
@@ -506,7 +554,7 @@ function handleResendVerification($input) {
         ");
         $stmt->execute([$verificationCode, $user['id']]);
         
-        sendVerificationEmail($user['email'], $user['first_name'], $verificationCode);
+        sendVerificationEmail($user['email'], $user['full_name'], $verificationCode);
         
         echo json_encode([
             'success' => true,
@@ -534,7 +582,7 @@ function handleForgotPassword($input) {
         
         $email = trim($input['email']);
         
-        $stmt = $db->prepare("SELECT id, first_name FROM users WHERE email = ? AND email_verified = 1");
+        $stmt = $db->prepare("SELECT id, full_name FROM users WHERE email = ? AND email_verified = 1");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -557,7 +605,7 @@ function handleForgotPassword($input) {
         ");
         $stmt->execute([$resetToken, $resetCode, $resetExpires, $user['id']]);
         
-        sendPasswordResetCodeEmail($email, $user['first_name'], $resetCode);
+        sendPasswordResetCodeEmail($email, $user['full_name'], $resetCode);
         
         echo json_encode([
             'success' => true,
@@ -589,7 +637,7 @@ function handleVerifyResetCode($input) {
         }
         
         $stmt = $db->prepare("
-            SELECT id, email, password_reset_code, password_reset_code_expires, first_name, last_name 
+            SELECT id, email, password_reset_code, password_reset_code_expires, full_name 
             FROM users 
             WHERE password_reset_token = ?
         ");
@@ -633,7 +681,7 @@ function handleResendResetCode($input) {
         }
         
         $stmt = $db->prepare("
-            SELECT id, email, first_name 
+            SELECT id, email, full_name 
             FROM users 
             WHERE password_reset_token = ?
         ");
@@ -653,7 +701,7 @@ function handleResendResetCode($input) {
         ");
         $stmt->execute([$resetCode, $user['id']]);
         
-        sendPasswordResetCodeEmail($user['email'], $user['first_name'], $resetCode);
+        sendPasswordResetCodeEmail($user['email'], $user['full_name'], $resetCode);
         
         echo json_encode([
             'success' => true,
@@ -722,11 +770,11 @@ function getPasswordResetCodeEmailTemplate($firstName, $resetCode) {
         <div class='container'>
             <div class='header'>
                 <h1>🔑 Password Reset Code</h1>
-                <p>8Paws Pet Boutique & Grooming Salon</p>
+                <p>Animates Pet Boutique & Grooming Salon</p>
             </div>
             <div class='content'>
                 <h2>Hi $firstName,</h2>
-                <p>We received a request to reset the password for your 8Paws Pet Boutique account.</p>
+                <p>We received a request to reset the password for your Animates PH - Camaro Branch.</p>
                 
                 <div class='code-box'>
                     <p style='margin: 0 0 10px 0; font-weight: bold;'>Your Password Reset Code:</p>
@@ -743,7 +791,7 @@ function getPasswordResetCodeEmailTemplate($firstName, $resetCode) {
                 <p>For security reasons, this code can only be used once. If you need another reset code, please request a new one.</p>
                 
                 <p>Best regards,<br>
-                The 8Paws Pet Boutique Team</p>
+                Animates PH - Camaro Branch</p>
             </div>
             <div class='footer'>
                 <p>Animates PH - Camaro Branch<br>
@@ -821,7 +869,7 @@ function handleResetPassword($input) {
         $passwordHash = password_hash($input['password'], PASSWORD_DEFAULT);
         $stmt = $db->prepare("
             UPDATE users 
-            SET password_hash = ?, password_reset_token = NULL, password_reset_code = NULL, password_reset_code_expires = NULL 
+            SET password = ?, password_reset_token = NULL, password_reset_code = NULL, password_reset_code_expires = NULL 
             WHERE id = ?
         ");
         $stmt->execute([$passwordHash, $user['id']]);
@@ -1005,7 +1053,7 @@ function sendVerificationEmail($email, $firstName, $verificationCode) {
         $mail->addAddress($email, $firstName);
         
         $mail->isHTML(true);
-        $mail->Subject = 'Verify Your Email - 8Paws Pet Boutique';
+        $mail->Subject = 'Verify Your Email - Animates PH - Camaro Branch';
         $mail->Body = getVerificationEmailTemplate($firstName, $verificationCode);
         
         $mail->send();
@@ -1031,7 +1079,7 @@ function sendPasswordResetEmail($email, $firstName, $resetToken) {
         $mail->addAddress($email, $firstName);
         
         $mail->isHTML(true);
-        $mail->Subject = 'Reset Your Password - 8Paws Pet Boutique';
+        $mail->Subject = 'Reset Your Password - Animates PH - Camaro Branch';
         $mail->Body = getPasswordResetEmailTemplate($firstName, $resetToken);
         
         $mail->send();
@@ -1063,12 +1111,12 @@ function getVerificationEmailTemplate($firstName, $verificationCode) {
     <body>
         <div class='container'>
             <div class='header'>
-                <h1>🐾 Welcome to 8Paws Pet Boutique!</h1>
+                <h1>🐾 Welcome to Animates PH - Camaro Branch!</h1>
                 <p>Professional Pet Grooming & Care Services</p>
             </div>
             <div class='content'>
                 <h2>Hi $firstName!</h2>
-                <p>Thank you for creating your account with 8Paws Pet Boutique. To complete your registration and start booking appointments for your furry friends, please verify your email address.</p>
+                <p>Thank you for creating your account with Animates PH - Camaro Branch. To complete your registration and start booking appointments for your furry friends, please verify your email address.</p>
                 
                 <div class='code-box'>
                     <p style='margin: 0 0 10px 0; font-weight: bold;'>Your Verification Code:</p>
@@ -1087,15 +1135,15 @@ function getVerificationEmailTemplate($firstName, $verificationCode) {
                 
                 <p>If you didn't create this account, you can safely ignore this email.</p>
                 
-                <p>Welcome to the 8Paws family!</p>
+                <p>Welcome to the Animates family!</p>
                 
                 <p>Best regards,<br>
-                The 8Paws Pet Boutique Team</p>
+                The Animates PH - Camaro Branch Team</p>
             </div>
             <div class='footer'>
-                <p>8Paws Pet Boutique & Grooming Salon<br>
+                <p>Animates PH - Camaro Branch<br>
                 📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567<br>
-                📧 info@8pawspetboutique.com</p>
+                📧 info@animates.ph.fairview@gmail.com</p>
             </div>
         </div>
     </body>
@@ -1104,7 +1152,7 @@ function getVerificationEmailTemplate($firstName, $verificationCode) {
 }
 
 function getPasswordResetEmailTemplate($firstName, $resetToken) {
-    $resetUrl = "http://localhost/8paws/reset_password.html?token=" . $resetToken;
+    $resetUrl = "http://localhost/animates/reset_password.html?token=" . $resetToken;
     
     return "
     <!DOCTYPE html>
@@ -1127,11 +1175,11 @@ function getPasswordResetEmailTemplate($firstName, $resetToken) {
         <div class='container'>
             <div class='header'>
                 <h1>🔑 Password Reset Request</h1>
-                <p>8Paws Pet Boutique & Grooming Salon</p>
+                <p>Animates PH - Camaro Branch</p>
             </div>
             <div class='content'>
                 <h2>Hi $firstName,</h2>
-                <p>We received a request to reset the password for your 8Paws Pet Boutique account.</p>
+                <p>We received a request to reset the password for your Animates PH - Camaro Branch account.</p>
                 
                 <p>If you requested this password reset, click the button below to set a new password:</p>
                 
@@ -1152,12 +1200,12 @@ function getPasswordResetEmailTemplate($firstName, $resetToken) {
                 <p style='word-break: break-all; color: #667eea;'>$resetUrl</p>
                 
                 <p>Best regards,<br>
-                The 8Paws Pet Boutique Team</p>
+                Animates PH - Camaro Branch</p>
             </div>
             <div class='footer'>
-                <p>8Paws Pet Boutique & Grooming Salon<br>
+                <p>Animates PH - Camaro Branch<br>
                 📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567<br>
-                📧 info@8pawspetboutique.com</p>
+                📧 info@animates.ph.fairview@gmail.com</p>
             </div>
         </div>
     </body>

@@ -61,6 +61,15 @@ try {
                     payment_date = NOW()
                     WHERE id = ?");
                 $stmt->execute([$paymentMethod, $paymentReference, $paymentPlatform, $amountTendered, $changeAmount, $bookingId]);
+                
+                // Reset RFID card is_currently_booked flag when payment is completed
+                $stmt = $db->prepare("
+                    UPDATE rfid_cards rc 
+                    JOIN bookings b ON rc.id = b.rfid_card_id 
+                    SET rc.is_currently_booked = 0 
+                    WHERE b.id = ?
+                ");
+                $stmt->execute([$bookingId]);
                  
                              // Get the total amount and apply discount
              $stmt = $db->prepare("SELECT total_amount FROM bookings WHERE id = ?");
@@ -132,6 +141,7 @@ try {
         $paymentMethod = $_GET['payment_method'] ?? '';
         $paymentReference = $_GET['payment_reference'] ?? null;
         $paymentPlatform = $_GET['payment_platform'] ?? null;
+        $isEmbed = isset($_GET['embed']) && ($_GET['embed'] === '1' || $_GET['embed'] === 'true');
         
         if (empty($bookingId)) {
             echo "<p>Error: Booking ID is required</p>";
@@ -194,6 +204,11 @@ try {
                 $subtotal = $booking['total_amount'];
                 $finalTotal = $subtotal - $discountAmount;
                 
+                // Optional sections (hidden when embedded in modal)
+                $thankYouSection = $isEmbed ? '' : "<div class=\"thank-you\">\n                   Thank you for choosing Animates PH!\n               </div>";
+                $footerSection = $isEmbed ? '' : "<div class=\"footer\">\n                   <p>© 2025 Animates PH. All rights reserved.</p>\n               </div>";
+                $printButtonSection = $isEmbed ? '' : "<div class=\"no-print\" style=\"text-align: center; margin-top: 30px;\">\n                   <button onclick=\"window.print()\" style=\"padding: 10px 20px; background: #D4AF37; color: white; border: none; border-radius: 5px; cursor: pointer;\">\n                       Print Receipt\n                   </button>\n               </div>";
+
                 // Output printable receipt HTML
                 echo "<!DOCTYPE html>
                 <html>
@@ -320,48 +335,38 @@ try {
                              <td><strong>Change:</strong></td>
                              <td>₱{$booking['change_amount']}</td>
                          </tr>" : "") . "
-                     </table>
-                 </div>
-                 
-                 <div class=\"services\">
-                     <h3>Services</h3>
-                     {$booking['services']}
-                 </div>
-                 
-                 " . ($discountAmount > 0 ? "
-                 <div style='background-color: #f8fff8; border: 2px solid #28a745; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center;'>
-                     <h3 style='color: #28a745; margin: 0 0 10px 0;'>🎉 Discount Applied!</h3>
-                     <p style='font-size: 18px; margin: 0; color: #333;'>
-                         You saved <strong>₱{$discountAmount}</strong> on this transaction!
-                     </p>
-                 </div>" : "") . "
-                 
-                                   <div class='total'>
-                      <div style='margin-bottom: 10px;'>
-                          <span>Subtotal: ₱{$subtotal}</span>
-                      </div>
-                      " . ($discountAmount > 0 ? "
-                      <div style='margin-bottom: 10px; color: #28a745;'>
-                          <span>Discount Applied: -₱{$discountAmount}</span>
-                      </div>" : "") . "
-                      <div style='font-size: 20px;'>
-                          <span>Total: ₱{$finalTotal}</span>
-                      </div>
-                  </div>
-                 
-                 <div class=\"thank-you\">
-                    Thank you for choosing Animates PH!
+                    </table>
                 </div>
                 
-                <div class=\"footer\">
-                    <p>© 2025 Animates PH. All rights reserved.</p>
+                <div class=\"services\">
+                    <h3>Services</h3>
+                    {$booking['services']}
                 </div>
                 
-                <div class=\"no-print\" style=\"text-align: center; margin-top: 30px;\">
-                    <button onclick=\"window.print()\" style=\"padding: 10px 20px; background: #D4AF37; color: white; border: none; border-radius: 5px; cursor: pointer;\">
-                        Print Receipt
-                    </button>
-                </div>
+                " . ($discountAmount > 0 ? "
+                <div style='background-color: #f8fff8; border: 2px solid #28a745; border-radius: 8px; padding: 15px; margin: 20px 0; text-align: center;'>
+                    <h3 style='color: #28a745; margin: 0 0 10px 0;'>🎉 Discount Applied!</h3>
+                    <p style='font-size: 18px; margin: 0; color: #333;'>
+                        You saved <strong>₱{$discountAmount}</strong> on this transaction!
+                    </p>
+                </div>" : "") . "
+                
+                                  <div class='total'>
+                     <div style='margin-bottom: 10px;'>
+                         <span>Subtotal: ₱{$subtotal}</span>
+                     </div>
+                     " . ($discountAmount > 0 ? "
+                     <div style='margin-bottom: 10px; color: #28a745;'>
+                         <span>Discount Applied: -₱{$discountAmount}</span>
+                     </div>" : "") . "
+                     <div style='font-size: 20px;'>
+                         <span>Total: ₱{$finalTotal}</span>
+                     </div>
+                 </div>
+                
+                {$thankYouSection}
+                {$footerSection}
+                {$printButtonSection}
             </div>
         </body>
         </html>";
@@ -611,21 +616,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
             b.payment_status,
             b.staff_notes,
             p.id as pet_id,
-            p.name as pet_name,
-            p.breed as pet_breed,
-            p.type as pet_type,
-            p.size as pet_size,
+            COALESCE(p.name, 'Unknown Pet') as pet_name,
+            COALESCE(p.breed, 'Unknown Breed') as pet_breed,
+            COALESCE(p.type, 'Unknown') as pet_type,
+            COALESCE(p.size, 'Unknown') as pet_size,
             c.id as customer_id,
-            c.name as customer_name,
-            c.phone as customer_phone,
-            c.email as customer_email,
+            COALESCE(c.name, 'Unknown Customer') as customer_name,
+            COALESCE(c.phone, 'N/A') as customer_phone,
+            COALESCE(c.email, 'N/A') as customer_email,
             GROUP_CONCAT(CONCAT(s.name, ' - ₱', s.price) SEPARATOR ', ') as services
         FROM bookings b
-        JOIN pets p ON b.pet_id = p.id
-        JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN pets p ON b.pet_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
         LEFT JOIN booking_services bs ON b.id = bs.booking_id
         LEFT JOIN services s ON bs.service_id = s.id
-        WHERE b.payment_status = 'pending' OR b.status IN ('in_progress', 'completed')
+        WHERE (b.payment_status = 'pending' OR b.payment_status IS NULL)
+          AND b.status IN ('checked-in', 'bathing', 'grooming', 'ready', 'completed')
+          AND b.total_amount IS NOT NULL AND b.total_amount > 0
         GROUP BY b.id
         ORDER BY b.check_in_time ASC");
         
@@ -655,25 +662,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
 // Handle GET request for fetching transactions
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_transactions') {
     try {
-        // Get transactions with customer and pet information
+        // Get all transactions with booking and customer information (using LEFT JOINs to handle missing data)
         $stmt = $db->prepare("SELECT 
             st.id,
             st.transaction_reference,
             st.amount,
+            st.discount_amount,
             st.payment_method,
             st.payment_platform,
             st.status,
             st.created_at,
-            b.custom_rfid as rfid_tag,
-            c.name as customer_name,
-            p.name as pet_name,
-            p.breed as pet_breed
+            b.id AS booking_id,
+            b.custom_rfid AS rfid_tag,
+            b.total_amount AS booking_total,
+            COALESCE(c.name, 'Unknown Customer') AS customer_name,
+            COALESCE(p.name, 'Unknown Pet') AS pet_name,
+            COALESCE(p.breed, 'Unknown Breed') AS pet_breed
         FROM sales_transactions st
-        JOIN bookings b ON st.booking_id = b.id
-        JOIN pets p ON b.pet_id = p.id
-        JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN bookings b ON st.booking_id = b.id
+        LEFT JOIN pets p ON b.pet_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
         ORDER BY st.created_at DESC
-        LIMIT 100");
+        LIMIT 200");
         
         $stmt->execute();
         $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -715,6 +725,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['ac
             exit;
         }
         
+        // Ensure audit table exists (best-effort)
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS `void_audit_log` (
+                `id` INT(11) NOT NULL AUTO_INCREMENT,
+                `transaction_id` INT(11) NOT NULL,
+                `void_reason` VARCHAR(255) NOT NULL,
+                `voided_by` INT(11) DEFAULT NULL,
+                `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        } catch (Throwable $e) {
+            // Ignore audit table creation failures; main void should still proceed
+            error_log('void_audit_log create failed: ' . $e->getMessage());
+        }
+
         // Start transaction
         $db->beginTransaction();
         
@@ -727,9 +752,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['ac
                 WHERE id = ?");
             $stmt->execute([$reason, $transactionId]);
             
-            // Log void action in audit table
-            $stmt = $db->prepare("INSERT INTO void_audit_log (transaction_id, void_reason, voided_by) VALUES (?, ?, ?)");
-            $stmt->execute([$transactionId, $reason, 1]); // Assuming user ID 1 for now
+            // Log void action in audit table (best-effort)
+            try {
+                $stmt = $db->prepare("INSERT INTO void_audit_log (transaction_id, void_reason, voided_by) VALUES (?, ?, ?)");
+                $stmt->execute([$transactionId, $reason, 1]); // Assuming user ID 1 for now
+            } catch (Throwable $e) {
+                error_log('void_audit_log insert failed: ' . $e->getMessage());
+            }
             
             // Commit transaction
             $db->commit();
@@ -751,6 +780,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['ac
             'success' => false,
             'message' => 'Failed to void transaction: ' . $e->getMessage()
         ]);
+    }
+    exit;
+}
+
+// Handle GET request for listing voided transactions
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'get_voided_transactions') {
+    try {
+        $stmt = $db->prepare("SELECT 
+            st.id,
+            st.transaction_reference,
+            st.amount,
+            st.payment_method,
+            st.payment_platform,
+            st.status,
+            st.created_at,
+            COALESCE(val.created_at, st.created_at) AS voided_at,
+            COALESCE(val.void_reason, 'No reason provided') AS void_reason,
+            b.id AS booking_id,
+            b.custom_rfid AS rfid_tag,
+            COALESCE(c.name, 'Unknown Customer') AS customer_name,
+            COALESCE(p.name, 'Unknown Pet') AS pet_name,
+            COALESCE(p.breed, 'Unknown Breed') AS pet_breed
+        FROM sales_transactions st
+        LEFT JOIN bookings b ON st.booking_id = b.id
+        LEFT JOIN pets p ON b.pet_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN void_audit_log val ON st.id = val.transaction_id
+        WHERE st.status = 'voided' OR st.void_reason IS NOT NULL
+        ORDER BY st.created_at DESC
+        LIMIT 100");
+        $stmt->execute();
+        $voided = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['success' => true, 'transactions' => $voided]);
+        exit;
+    } catch (Exception $e) {
+        error_log("Error fetching voided transactions: " . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Failed to fetch voided transactions: ' . $e->getMessage()]);
+        exit;
+    }
+}
+
+// Handle GET request to ensure void_audit_log table exists
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'ensure_void_audit_log') {
+    try {
+        $db->exec("CREATE TABLE IF NOT EXISTS `void_audit_log` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `transaction_id` INT(11) NOT NULL,
+            `void_reason` VARCHAR(255) NOT NULL,
+            `voided_by` INT(11) DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        echo json_encode(['success' => true, 'message' => 'void_audit_log is ready']);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to create void_audit_log: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// Handle POST request to restore a voided transaction back to completed
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['action'] === 'restore_transaction') {
+    try {
+        $data = json_decode(file_get_contents('php://input'), true);
+        $transactionId = $data['transaction_id'] ?? 0;
+        if (empty($transactionId)) {
+            echo json_encode(['success' => false, 'message' => 'Transaction ID is required']);
+            exit;
+        }
+        $db->beginTransaction();
+        try {
+            // Restore status
+            $stmt = $db->prepare("UPDATE sales_transactions SET status = 'completed' WHERE id = ?");
+            $stmt->execute([$transactionId]);
+            // Optional: remove audit log entry
+            try {
+                $stmt = $db->prepare("DELETE FROM void_audit_log WHERE transaction_id = ?");
+                $stmt->execute([$transactionId]);
+            } catch (Throwable $e) {
+                error_log('void_audit_log delete failed: ' . $e->getMessage());
+            }
+            $db->commit();
+            echo json_encode(['success' => true, 'message' => 'Transaction restored']);
+        } catch (Throwable $e) {
+            $db->rollBack();
+            throw $e;
+        }
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'message' => 'Failed to restore transaction: ' . $e->getMessage()]);
     }
     exit;
 }
@@ -851,19 +968,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="transactions_' . date('Y-m-d_H-i-s') . '.csv"');
         
-        // Get all transactions with customer and pet information
+        // Get only the latest transaction per booking (dedupe by booking/RFID)
         $stmt = $db->prepare("SELECT 
             st.transaction_reference,
             st.amount,
             st.payment_method,
             st.payment_platform,
-            st.status,
             st.created_at,
             b.custom_rfid as rfid_tag,
             c.name as customer_name,
             p.name as pet_name,
             p.breed as pet_breed
         FROM sales_transactions st
+        INNER JOIN (
+            SELECT booking_id, MAX(id) AS latest_id
+            FROM sales_transactions
+            GROUP BY booking_id
+        ) latest ON latest.latest_id = st.id
         JOIN bookings b ON st.booking_id = b.id
         JOIN pets p ON b.pet_id = p.id
         JOIN customers c ON p.customer_id = c.id
@@ -878,34 +999,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
         // Add UTF-8 BOM for proper Excel encoding
         fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
         
-        // Add CSV headers
+        // Add CSV headers (omit status; completed transactions are already paid)
         fputcsv($output, [
             'Transaction Reference',
-            'Date & Time',
+            'Date Time',
             'Customer Name',
             'Pet Name',
             'Pet Breed',
             'RFID Tag',
             'Amount',
             'Payment Method',
-            'Payment Platform',
-            'Status'
+            'Payment Platform'
         ]);
         
         // Add data rows
         foreach ($transactions as $transaction) {
             $dateTime = new DateTime($transaction['created_at']);
+            // Use ISO-like format for better spreadsheet recognition
+            $formattedDate = $dateTime->format('Y-m-d H:i');
+            // Amount as plain number for numeric cells
+            $amountValue = number_format((float)$transaction['amount'], 2, '.', '');
+            $platform = $transaction['payment_platform'] ?: '';
             fputcsv($output, [
                 $transaction['transaction_reference'],
-                $dateTime->format('M j, Y g:i A'),
+                $formattedDate,
                 $transaction['customer_name'],
                 $transaction['pet_name'],
                 $transaction['pet_breed'],
                 $transaction['rfid_tag'],
-                '₱' . number_format($transaction['amount'], 2),
+                $amountValue,
                 ucfirst($transaction['payment_method']),
-                $transaction['payment_platform'] ?: 'N/A',
-                ucfirst($transaction['status'])
+                $platform
             ]);
         }
         
@@ -914,6 +1038,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['act
         
     } catch (Exception $e) {
         error_log("Error exporting transactions: " . $e->getMessage());
+        echo json_encode([
+            'success' => false,
+            'message' => 'Failed to export transactions: ' . $e->getMessage()
+        ]);
+        exit;
+    }
+}
+
+// Handle GET request for exporting transactions to Excel (auto-fit via HTML table)
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'export_transactions_excel') {
+    try {
+        // Set headers for Excel (HTML table trick)
+        header('Content-Type: application/vnd.ms-excel; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="transactions_' . date('Y-m-d_H-i-s') . '.xls"');
+        echo "\xEF\xBB\xBF"; // UTF-8 BOM
+
+        // Get only the latest transaction per booking (dedupe by booking/RFID)
+        $stmt = $db->prepare("SELECT 
+            st.transaction_reference,
+            st.amount,
+            st.payment_method,
+            st.payment_platform,
+            st.created_at,
+            b.custom_rfid as rfid_tag,
+            c.name as customer_name,
+            p.name as pet_name,
+            p.breed as pet_breed
+        FROM sales_transactions st
+        INNER JOIN (
+            SELECT booking_id, MAX(id) AS latest_id
+            FROM sales_transactions
+            GROUP BY booking_id
+        ) latest ON latest.latest_id = st.id
+        JOIN bookings b ON st.booking_id = b.id
+        JOIN pets p ON b.pet_id = p.id
+        JOIN customers c ON p.customer_id = c.id
+        ORDER BY st.created_at DESC");
+
+        $stmt->execute();
+        $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Begin HTML table (Excel will auto-fit based on content)
+        echo '<html><head><meta charset="utf-8"><style>table{border-collapse:collapse;} th,td{border:1px solid #ccc; padding:6px; font-family:Arial, sans-serif; font-size:11pt; white-space:nowrap;} th{text-align:left; background:#f5f5f5;}</style></head><body>';
+        echo '<table>';
+        echo '<thead><tr>'
+            . '<th>Transaction Reference</th>'
+            . '<th>Date Time</th>'
+            . '<th>Customer Name</th>'
+            . '<th>Pet Name</th>'
+            . '<th>Pet Breed</th>'
+            . '<th>RFID Tag</th>'
+            . '<th>Amount</th>'
+            . '<th>Payment Method</th>'
+            . '<th>Payment Platform</th>'
+            . '</tr></thead><tbody>';
+
+        foreach ($transactions as $transaction) {
+            $dateTime = new DateTime($transaction['created_at']);
+            $formattedDate = $dateTime->format('Y-m-d H:i');
+            $amountValue = number_format((float)$transaction['amount'], 2, '.', '');
+            $platform = $transaction['payment_platform'] ?: '';
+            echo '<tr>'
+                . '<td>' . htmlspecialchars($transaction['transaction_reference']) . '</td>'
+                . '<td>' . htmlspecialchars($formattedDate) . '</td>'
+                . '<td>' . htmlspecialchars($transaction['customer_name']) . '</td>'
+                . '<td>' . htmlspecialchars($transaction['pet_name']) . '</td>'
+                . '<td>' . htmlspecialchars($transaction['pet_breed']) . '</td>'
+                . '<td>' . htmlspecialchars($transaction['rfid_tag']) . '</td>'
+                . '<td>' . htmlspecialchars($amountValue) . '</td>'
+                . '<td>' . htmlspecialchars(ucfirst($transaction['payment_method'])) . '</td>'
+                . '<td>' . htmlspecialchars($platform) . '</td>'
+                . '</tr>';
+        }
+
+        echo '</tbody></table></body></html>';
+        exit;
+
+    } catch (Exception $e) {
+        error_log("Error exporting transactions excel: " . $e->getMessage());
         echo json_encode([
             'success' => false,
             'message' => 'Failed to export transactions: ' . $e->getMessage()
