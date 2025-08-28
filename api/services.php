@@ -40,52 +40,25 @@ try {
 
 function getServicesWithPricing($db) {
     try {
-        // First check if is_size_based column exists
-        $stmt = $db->prepare("SHOW COLUMNS FROM services LIKE 'is_size_based'");
-        $stmt->execute();
-        $columnExists = $stmt->fetch() !== false;
-        
-        // Build query based on column existence
-        if ($columnExists) {
-            $query = "
-                SELECT 
-                    s.id,
-                    s.name,
-                    s.description,
-                    s.category,
-                    s.is_size_based,
-                    s.base_price,
-                    sp.pet_size,
-                    sp.price
-                FROM services s
-                LEFT JOIN service_pricing sp ON s.id = sp.service_id
-                WHERE s.status = 'active'
-                ORDER BY 
-                    FIELD(s.category, 'basic', 'premium', 'addon'),
-                    s.id,
-                    FIELD(sp.pet_size, 'small', 'medium', 'large', 'extra_large')
-            ";
-        } else {
-            // Fallback query without is_size_based column
-            $query = "
-                SELECT 
-                    s.id,
-                    s.name,
-                    s.description,
-                    s.category,
-                    TRUE as is_size_based,
-                    s.base_price,
-                    sp.pet_size,
-                    sp.price
-                FROM services2 s
-                LEFT JOIN service_pricing sp ON s.id = sp.service_id
-                WHERE s.status = 'active'
-                ORDER BY 
-                    FIELD(s.category, 'basic', 'premium', 'addon'),
-                    s.id,
-                    FIELD(sp.pet_size, 'small', 'medium', 'large', 'extra_large')
-            ";
-        }
+        // Use services2 table directly since we know it has the correct structure
+        $query = "
+            SELECT 
+                s.id,
+                s.name,
+                s.description,
+                s.category,
+                s.is_size_based,
+                s.base_price,
+                sp.pet_size,
+                sp.price
+            FROM services2 s
+            LEFT JOIN service_pricing sp ON s.id = sp.service_id
+            WHERE s.status = 'active'
+            ORDER BY 
+                FIELD(s.category, 'basic', 'premium', 'addon'),
+                s.id,
+                FIELD(sp.pet_size, 'small', 'medium', 'large', 'extra_large')
+        ";
         
         $stmt = $db->prepare($query);
         $stmt->execute();
@@ -131,6 +104,23 @@ function getServicesWithPricing($db) {
         
     } catch(Exception $e) {
         throw new Exception('Failed to fetch services: ' . $e->getMessage());
+    }
+}
+
+function getPetSizes($db) {
+    try {
+        $query = "SELECT * FROM pet_sizes ORDER BY sort_order, id";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        $petSizes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => true,
+            'pet_sizes' => $petSizes
+        ]);
+        
+    } catch(Exception $e) {
+        throw new Exception('Failed to fetch pet sizes: ' . $e->getMessage());
     }
 }
 ?>

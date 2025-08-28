@@ -9,6 +9,7 @@ const togglePasswordBtn = document.getElementById('togglePassword');
 
 function setRole(role) {
   expectedRoleInput.value = role;
+  
   if (role === 'admin') {
     tabAdmin.classList.remove('tab-inactive');
     tabAdmin.classList.add('tab-active');
@@ -72,12 +73,22 @@ form.addEventListener('submit', async (e) => {
   const email = emailInput.value.trim();
   const password = passwordInput.value;
   const expectedRole = expectedRoleInput.value;
+  
   try {
     const result = await signin(email, password);
     const actualRole = (result && result.user && result.user.role) ? result.user.role : '';
+    
     if (!actualRole) throw new Error('Unable to determine user role');
-    if ((expectedRole === 'admin' && actualRole !== 'admin') || (expectedRole === 'staff' && actualRole !== 'staff')) {
-      throw new Error(`Access denied. ${expectedRole.charAt(0).toUpperCase() + expectedRole.slice(1)} role required.`);
+    
+    // Allow cashier to login with either admin or staff tab
+    // Only restrict admin tab to admin users
+    if (expectedRole === 'admin' && actualRole !== 'admin') {
+      throw new Error(`Access denied. Admin role required.`);
+    }
+    
+    // Staff tab allows both staff and cashier roles
+    if (expectedRole === 'staff' && !['staff', 'cashier'].includes(actualRole)) {
+      throw new Error(`Access denied. Staff role required.`);
     }
     if (result.token) {
       localStorage.setItem('auth_token', result.token);
@@ -94,10 +105,9 @@ form.addEventListener('submit', async (e) => {
     }
     if (actualRole === 'admin') {
       window.location.href = 'admin_accounts.html';
-    } else if (actualRole === 'staff') {
-      // Check specific staff role for proper redirection
-      const staffRole = (result && result.user && result.user.staff_role) ? result.user.staff_role : '';
-      if (staffRole === 'cashier') {
+    } else if (['staff', 'cashier'].includes(actualRole)) {
+      // Redirect based on role
+      if (actualRole === 'cashier') {
         window.location.href = 'billing_management.html';
       } else {
         window.location.href = 'staff_dashboard.html';

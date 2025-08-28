@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../vendor/autoload.php'; // For PHPMailer
+require_once __DIR__ . '/../config/database.php'; // For database connection
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
@@ -187,7 +188,10 @@ function sendBookingStatusEmailFromRFID($bookingId, $tapCount) {
  */
 function sendBookingStatusEmail($bookingId) {
     try {
+        error_log("Email: Starting sendBookingStatusEmail for booking ID: $bookingId");
+        
         $db = getDB();
+        error_log("Email: Database connection successful");
         
         // Get booking details with all required information
         $stmt = $db->prepare("
@@ -215,16 +219,20 @@ function sendBookingStatusEmail($bookingId) {
 
         $stmt->execute([$bookingId]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        error_log("Email: Booking data retrieved: " . json_encode($booking));
         
         if (!$booking || !$booking['owner_email']) {
+            error_log("Email: No booking found or no email address for booking ID: $bookingId");
             throw new Exception('Booking not found or no email address');
         }
         
        // Use current booking status instead of calculating from tap count
 $status = $booking['current_status'];
+        error_log("Email: Current status: $status");
         
         // Send email
         $mail = new PHPMailer(true);
+        error_log("Email: PHPMailer initialized");
         
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
@@ -241,11 +249,14 @@ $status = $booking['current_status'];
         $mail->Subject = "Pet Grooming Update - {$booking['pet_name']} is {$status}";
         $mail->Body = getBookingStatusEmailTemplate($booking, $status);
         
+        error_log("Email: Attempting to send email to: " . $booking['owner_email']);
         $mail->send();
+        error_log("Email: Email sent successfully to: " . $booking['owner_email']);
         return true;
         
     } catch (Exception $e) {
-        error_log("Email could not be sent. Mailer Error: {$e->getMessage()}");
+        error_log("Email: Email could not be sent. Mailer Error: {$e->getMessage()}");
+        error_log("Email: Error trace: " . $e->getTraceAsString());
         return false;
     }
 }
@@ -268,6 +279,22 @@ function getStatusFromTapCount($tapCount) {
  * Email template for booking confirmation
  */
 function getBookingConfirmationEmailTemplate($booking) {
+    // Prepare conditional content
+    $ageInfo = '';
+    if ($booking['pet_age']) {
+        $ageInfo = " • " . ucfirst($booking['pet_age']);
+    }
+    
+    $servicesSection = '';
+    if ($booking['services']) {
+        $servicesSection = "
+                <div class='services-list'>
+                    <div class='info-label'>Services Selected</div>
+                    <div class='info-value'>{$booking['services']}</div>
+                    <div style='font-size: 14px; color: #666; margin-top: 5px;'>Total: ₱" . number_format($booking['total_amount'], 2) . "</div>
+                </div>";
+    }
+    
     return "
     <!DOCTYPE html>
     <html>
@@ -308,7 +335,7 @@ function getBookingConfirmationEmailTemplate($booking) {
                     <div class='info-item'>
                         <div class='info-label'>Pet Information</div>
                         <div class='info-value'>{$booking['pet_name']}</div>
-                        <div style='font-size: 14px; color: #666;'>{$booking['pet_type']} • {$booking['pet_breed']}" . ($booking['pet_age'] ? " • " . ucfirst($booking['pet_age']) : "") . "</div>
+                        <div style='font-size: 14px; color: #666;'>{$booking['pet_type']} • {$booking['pet_breed']}{$ageInfo}</div>
                     </div>
                     <div class='info-item'>
                         <div class='info-label'>Owner Contact</div>
@@ -317,13 +344,7 @@ function getBookingConfirmationEmailTemplate($booking) {
                     </div>
                 </div>
                 
-                " . ($booking['services'] ? "
-                <div class='services-list'>
-                    <div class='info-label'>Services Selected</div>
-                    <div class='info-value'>{$booking['services']}</div>
-                    <div style='font-size: 14px; color: #666; margin-top: 5px;'>Total: ₱" . number_format($booking['total_amount'], 2) . "</div>
-                </div>
-                " : "") . "
+                {$servicesSection}
                 
                 <div style='background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;'>
                     <div class='info-label'>RFID Tag Assigned</div>
@@ -343,9 +364,9 @@ function getBookingConfirmationEmailTemplate($booking) {
             </div>
             
             <div class='footer'>
-                <p> Animates PH - Camaro Branch<br>
+                <p>Animates PH - Camaro Branch<br>
                 📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567<br>
-                📧 info@animates.ph.fairview@gmail.com</p>
+                📧 animates.ph.fairview@gmail.com</p>
             </div>
         </div>
     </body>
@@ -373,6 +394,34 @@ function getBookingStatusEmailTemplate($booking, $status) {
     
     $currentEmoji = $statusEmoji[$status] ?? '📋';
     $currentColor = $statusColors[$status] ?? '#667eea';
+    
+    // Prepare conditional content
+    $ageInfo = '';
+    if ($booking['pet_age']) {
+        $ageInfo = " • " . ucfirst($booking['pet_age']);
+    }
+    
+    $servicesSection = '';
+    if ($booking['services']) {
+        $servicesSection = "
+                <div class='services-list'>
+                    <div class='info-label'>Services Selected</div>
+                    <div class='info-value'>{$booking['services']}</div>
+                    <div style='font-size: 14px; color: #666; margin-top: 5px;'>Total: ₱" . number_format($booking['total_amount'], 2) . "</div>
+                </div>";
+    }
+    
+    $readySection = '';
+    if ($status === 'ready for pickup') {
+        $readySection = "
+                <div style='background: #dcfce7; border: 2px solid #16a34a; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;'>
+                    <h3 style='color: #16a34a; margin: 0 0 10px 0;'>🎉 Ready for Pickup!</h3>
+                    <p style='margin: 0; color: #15803d;'>Your pet is all groomed and ready to go home! Please come by at your earliest convenience.</p>
+                </div>";
+    } else {
+        $readySection = "
+                <p>We'll send you another update when {$booking['pet_name']} moves to the next stage. Thank you for choosing Animates PH - Camaro Branch!</p>";
+    }
     
     return "
     <!DOCTYPE html>
@@ -435,7 +484,7 @@ function getBookingStatusEmailTemplate($booking, $status) {
                     <div class='info-item'>
                         <div class='info-label'>Pet Information</div>
                         <div class='info-value'>{$booking['pet_name']}</div>
-                        <div style='font-size: 14px; color: #666;'>{$booking['pet_type']} • {$booking['pet_breed']}" . ($booking['pet_age'] ? " • " . ucfirst($booking['pet_age']) : "") . "</div>
+                        <div style='font-size: 14px; color: #666;'>{$booking['pet_type']} • {$booking['pet_breed']}{$ageInfo}</div>
                     </div>
                     <div class='info-item'>
                         <div class='info-label'>Owner Contact</div>
@@ -444,13 +493,7 @@ function getBookingStatusEmailTemplate($booking, $status) {
                     </div>
                 </div>
                 
-                " . ($booking['services'] ? "
-                <div class='services-list'>
-                    <div class='info-label'>Services Selected</div>
-                    <div class='info-value'>{$booking['services']}</div>
-                    <div style='font-size: 14px; color: #666; margin-top: 5px;'>Total: ₱" . number_format($booking['total_amount'], 2) . "</div>
-                </div>
-                " : "") . "
+                {$servicesSection}
                 
                 <div style='background: #eff6ff; padding: 20px; border-radius: 8px; margin: 20px 0;'>
                     <div class='info-label'>RFID Tag Assigned</div>
@@ -471,14 +514,7 @@ function getBookingStatusEmailTemplate($booking, $status) {
                     </div>
                 </div>
                 
-                " . ($status === 'ready for pickup' ? "
-                <div style='background: #dcfce7; border: 2px solid #16a34a; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;'>
-                    <h3 style='color: #16a34a; margin: 0 0 10px 0;'>🎉 Ready for Pickup!</h3>
-                    <p style='margin: 0; color: #15803d;'>Your pet is all groomed and ready to go home! Please come by at your earliest convenience.</p>
-                </div>
-                " : "
-                <p>We'll send you another update when {$booking['pet_name']} moves to the next stage. Thank you for choosing Animates PH - Camaro Branch!</p>
-                ") . "
+                {$readySection}
                 
                 <p style='margin-top: 30px;'>Best regards,<br>
                 The Animates PH - Camaro Branch Team</p>
@@ -487,7 +523,7 @@ function getBookingStatusEmailTemplate($booking, $status) {
             <div class='footer'>
                 <p>Animates PH - Camaro Branch<br>
                 📍 123 Pet Street, Quezon City | 📞 (02) 8123-4567<br>
-                📧 info@animates.ph.fairview@gmail.com</p>
+                📧 animates.ph.fairview@gmail.com</p>
                 <p style='margin-top: 15px; font-size: 12px; color: #999;'>
                     This email was sent because you have an active booking with us. 
                     Your RFID tag: {$booking['custom_rfid']}
@@ -644,7 +680,7 @@ function getProgressPercentage($status) {
         'checked-in' => 25,
         'bathing' => 50,
         'grooming' => 75,
-        'ready' => 100,
+        'ready for pickup' => 100,
         'completed' => 100
     ];
     
@@ -658,7 +694,10 @@ function getProgressPercentage($status) {
  */
 function sendCompletionEmail($bookingId) {
     try {
+        error_log("Email: Starting sendCompletionEmail for booking ID: $bookingId");
+        
         $db = getDB();
+        error_log("Email: Database connection successful for completion email");
         
         // Get booking details with all required information
         $stmt = $db->prepare("
@@ -687,13 +726,16 @@ function sendCompletionEmail($bookingId) {
         ");
         $stmt->execute([$bookingId]);
         $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+        error_log("Email: Completion email - Booking data retrieved: " . json_encode($booking));
         
         if (!$booking || !$booking['owner_email']) {
+            error_log("Email: Completion email - No booking found or no email address for booking ID: $bookingId");
             throw new Exception('Booking not found or no email address');
         }
         
         // Send email
         $mail = new PHPMailer(true);
+        error_log("Email: PHPMailer initialized for completion email");
         
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
@@ -710,12 +752,14 @@ function sendCompletionEmail($bookingId) {
         $mail->Subject = "Thank You! {$booking['pet_name']}'s Service Completed ";
         $mail->Body = getCompletionEmailTemplate($booking);
         
+        error_log("Email: Attempting to send completion email to: " . $booking['owner_email']);
         $mail->send();
-        error_log("Completion email sent successfully to: " . $booking['owner_email']);
+        error_log("Email: Completion email sent successfully to: " . $booking['owner_email']);
         return true;
         
     } catch (Exception $e) {
-        error_log("Completion email could not be sent. Mailer Error: {$e->getMessage()}");
+        error_log("Email: Completion email could not be sent. Mailer Error: {$e->getMessage()}");
+        error_log("Email: Completion email error trace: " . $e->getTraceAsString());
         return false;
     }
 }

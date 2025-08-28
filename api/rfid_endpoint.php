@@ -42,18 +42,29 @@ try {
     $emailSent = false;
     if ($bookingResult['updated'] && $bookingResult['booking_id']) {
         try {
+            error_log("RFID: Attempting to send email for booking ID: " . $bookingResult['booking_id']);
+            error_log("RFID: Is completion? " . ($bookingResult['is_completion'] ? 'YES' : 'NO'));
+            
             // Check if this is completion (tap 5)
             if ($bookingResult['is_completion']) {
                 // Send completion/pickup email - NEW
+                error_log("RFID: Calling sendCompletionEmail for booking ID: " . $bookingResult['booking_id']);
                 $emailSent = sendCompletionEmail($bookingResult['booking_id']);
+                error_log("RFID: sendCompletionEmail result: " . ($emailSent ? 'SUCCESS' : 'FAILED'));
             } else {
                 // Send regular status update email
+                error_log("RFID: Calling sendBookingStatusEmail for booking ID: " . $bookingResult['booking_id']);
                 $emailSent = sendBookingStatusEmail($bookingResult['booking_id']);
+                error_log("RFID: sendBookingStatusEmail result: " . ($emailSent ? 'SUCCESS' : 'FAILED'));
             }
         } catch (Exception $emailError) {
-            error_log("Email sending failed for booking {$bookingResult['booking_id']}: " . $emailError->getMessage());
+            error_log("RFID: Email sending failed for booking {$bookingResult['booking_id']}: " . $emailError->getMessage());
+            error_log("RFID: Email error trace: " . $emailError->getTraceAsString());
             // Don't fail the API call if email fails
         }
+    } else {
+        error_log("RFID: No email sent - booking not updated or no booking ID");
+        error_log("RFID: updated=" . ($bookingResult['updated'] ? 'true' : 'false') . ", booking_id=" . ($bookingResult['booking_id'] ?? 'null'));
     }
     
     echo json_encode([
@@ -150,6 +161,8 @@ function updateBookingStatus($db, $cardId, $input) {
     $tapCount = $input['tap_count'];
     $customUID = $input['custom_uid'];
     
+    error_log("RFID: updateBookingStatus called with cardId=$cardId, customUID=$customUID, tapCount=$tapCount");
+    
     // UPDATED status mapping to include tap 5 for completion
     $statusMap = [
         1 => 'checked-in',
@@ -169,35 +182,44 @@ function updateBookingStatus($db, $cardId, $input) {
     
     // Skip if tap count is not in our mapping
     if (!isset($statusMap[$tapCount])) {
+        error_log("RFID: Invalid tap count: $tapCount");
         return $result;
     }
     
     $newStatus = $statusMap[$tapCount];
     $result['is_completion'] = ($tapCount === 5);  // NEW - check if completion
     
-    // Find booking using custom_rfid (which matches custom_uid)
-    // In updateBookingStatus(), change the query to:
+    // Find booking using custom_rfid (which matches custom_uid from device)
+    // FIXED: Use custom_rfid directly instead of joining with rfid_cards
     $stmt = $db->prepare("
         SELECT b.id, b.status, b.custom_rfid
         FROM bookings b
-        JOIN rfid_cards r ON r.id = b.rfid_card_id 
-        WHERE r.card_uid = ? 
+        WHERE b.custom_rfid = ? 
         AND b.status NOT IN ('completed', 'cancelled')
         ORDER BY b.created_at DESC 
         LIMIT 1
     ");
-    $stmt->execute([$input['card_uid']]); // Use card_uid instead of custom_uid
+    $stmt->execute([$customUID]); // Use custom_uid from device
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    error_log("RFID: Looking for booking with custom_rfid=$customUID, found: " . json_encode($booking));
     
     if (!$booking) {
         // No active booking found for this custom UID
+        error_log("RFID: No active booking found for custom_uid: $customUID");
         return $result;
     }
     
     // Check if status actually needs updating
     if ($booking['status'] === $newStatus) {
+        error_log("RFID: Status already $newStatus, no update needed");
+        $result['updated'] = true;
+        $result['booking_id'] = $booking['id'];
+        $result['new_status'] = $newStatus;
         return $result;
     }
+    
+    error_log("RFID: Updating booking ID {$booking['id']} from status '{$booking['status']}' to '$newStatus'");
     
     // Update booking status
     $stmt = $db->prepare("
@@ -209,8 +231,8 @@ function updateBookingStatus($db, $cardId, $input) {
     
     // Add status update record
     $stmt = $db->prepare("
-        INSERT INTO status_updates (booking_id, status, notes, updated_by, created_at) 
-        VALUES (?, ?, ?, ?, NOW())
+        INSERT INTO status_updates (booking_id, status, notes, created_at) 
+        VALUES (?, ?, ?, NOW())
     ");
     
     $notes = "Status automatically updated via RFID tap #" . $tapCount;
@@ -221,8 +243,7 @@ function updateBookingStatus($db, $cardId, $input) {
     $stmt->execute([
         $booking['id'],
         $newStatus,
-        $notes,
-        "RFID System"
+        $notes
     ]);
     
     // If status is 'ready', update actual_completion time (tap 4)
@@ -249,6 +270,8 @@ function updateBookingStatus($db, $cardId, $input) {
     $result['updated'] = true;
     $result['booking_id'] = $booking['id'];
     $result['new_status'] = $newStatus;
+    
+    error_log("RFID: Successfully updated booking ID {$booking['id']} to status '$newStatus'");
     
     return $result;
 }

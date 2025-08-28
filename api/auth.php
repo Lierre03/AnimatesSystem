@@ -277,7 +277,7 @@ function handleLogin($input) {
         // Log the email being used (remove in production)
         error_log("Login attempt for email: " . $email);
         
-$stmt = $db->prepare("SELECT id, password_hash, email_verified, is_active, first_name, last_name, role, staff_role FROM users WHERE email = ?");
+        $stmt = $db->prepare("SELECT id, password, is_active, username, full_name, role FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -286,13 +286,9 @@ $stmt = $db->prepare("SELECT id, password_hash, email_verified, is_active, first
             throw new Exception('Invalid email or password');
         }
         
-        if (!password_verify($password, $user['password_hash'])) {
+        if (!password_verify($password, $user['password'])) {
             error_log("Password verification failed for email: " . $email);
             throw new Exception('Invalid email or password');
-        }
-        
-        if (!$user['email_verified']) {
-            throw new Exception('Please verify your email before signing in');
         }
         
         if (!$user['is_active']) {
@@ -301,18 +297,17 @@ $stmt = $db->prepare("SELECT id, password_hash, email_verified, is_active, first
         
         $token = generateJWT($user['id'], $email);
         
-        $stmt = $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
-        $stmt->execute([$user['id']]);
+        // Note: last_login column doesn't exist, so we'll skip that update
         
         echo json_encode([
     'success' => true,
     'token' => $token,
     'user_id' => $user['id'],
     'user' => [
-        'name' => $user['first_name'] . ' ' . $user['last_name'],
+        'name' => $user['full_name'],
         'email' => $email,
         'role' => $user['role'],
-        'staff_role' => $user['staff_role']
+        'username' => $user['username']
     ]
 ]);
         exit;
@@ -891,7 +886,7 @@ function checkUserRole() {
         $db = getDB();
         
         // Check if user exists
-        $stmt = $db->prepare("SELECT id, email, role, staff_role, is_active FROM users WHERE id = ? AND email = ?");
+        $stmt = $db->prepare("SELECT id, email, role, is_active FROM users WHERE id = ? AND email = ?");
         $stmt->execute([$decoded->user_id, $decoded->email]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -907,8 +902,7 @@ function checkUserRole() {
             'success' => true,
             'user_id' => $user['id'],
             'email' => $user['email'],
-            'role' => $user['role'],
-            'staff_role' => $user['staff_role']
+            'role' => $user['role']
         ]);
         exit;
         
