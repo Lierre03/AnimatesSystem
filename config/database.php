@@ -2,7 +2,7 @@
 // Database configuration for XAMPP
 class Database {
     private $host = 'localhost';
-    private $db_name = '8paws_db';
+    private $db_name = 'animates';
     private $username = 'root';
     private $password = ''; // XAMPP default password is empty
     private $conn;
